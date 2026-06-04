@@ -582,6 +582,25 @@ async function initializeDatabase() {
 
 async function createTables() {
   try {
+        // EMPLOYEES TABLE
+    await db.run(`
+      CREATE TABLE IF NOT EXISTS employees (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        gender TEXT,
+        birth_date TEXT,
+        religion TEXT,
+        phone TEXT,
+        address TEXT,
+        position TEXT NOT NULL,
+        salary INTEGER NOT NULL,
+        salary_type TEXT DEFAULT 'Bulanan',
+        additional_variable TEXT,
+        bpjs TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
     // Create rooms table first
     await db.run(`
       CREATE TABLE IF NOT EXISTS rooms (
@@ -2183,6 +2202,141 @@ app.delete('/api/guardians/:id', async (req, res) => {
   } catch (error) {
     console.error('Error deleting guardian:', error);
     res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ================= EMPLOYEES API =================
+
+// GET ALL EMPLOYEES
+app.get('/api/employees', async (req, res) => {
+  try {
+    const employees = await db.all(`
+      SELECT *
+      FROM employees
+      ORDER BY id DESC
+    `);
+
+    res.json(employees);
+  } catch (error) {
+    console.error('Error fetching employees:', error);
+
+    res.status(500).json({
+      error: 'Gagal mengambil data karyawan'
+    });
+  }
+});
+
+
+// GET EMPLOYEE BY ID
+app.get('/api/employees/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const employee = await db.get(`
+      SELECT *
+      FROM employees
+      WHERE id = ?
+    `, [id]);
+
+    if (!employee) {
+      return res.status(404).json({
+        error: 'Data karyawan tidak ditemukan'
+      });
+    }
+
+    res.json(employee);
+
+  } catch (error) {
+    console.error('Error fetching employee detail:', error);
+
+    res.status(500).json({
+      error: 'Gagal mengambil detail karyawan'
+    });
+  }
+});
+
+
+// CREATE EMPLOYEE
+app.post('/api/employees', async (req, res) => {
+  try {
+    const {
+      name,
+      gender,
+      birth_date,
+      religion,
+      phone,
+      address,
+      position,
+      salary,
+      salary_type,
+      additional_variable,
+      bpjs
+    } = req.body;
+
+    const result = await db.run(`
+      INSERT INTO employees (
+        name,
+        gender,
+        birth_date,
+        religion,
+        phone,
+        address,
+        position,
+        salary,
+        salary_type,
+        additional_variable,
+        bpjs
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [
+      name,
+      gender,
+      birth_date,
+      religion,
+      phone,
+      address,
+      position,
+      salary,
+      salary_type,
+      additional_variable,
+      bpjs
+    ]);
+
+    res.status(201).json({
+      success: true,
+      message: 'Data karyawan berhasil ditambahkan',
+      employee_id: result.lastID
+    });
+  } catch (error) {
+    console.error('Error creating employee:', error);
+
+    res.status(500).json({
+      error: 'Gagal menambahkan data karyawan'
+    });
+  }
+});
+
+
+// DELETE EMPLOYEE
+app.delete('/api/employees/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    await db.run(`
+      DELETE FROM employees
+      WHERE id = ?
+    `, [id]);
+
+    res.json({
+      success: true,
+      message: 'Data karyawan berhasil dihapus'
+    });
+  } catch (error) {
+    console.error('Error deleting employee:', error);
+
+    res.status(500).json({
+      error: 'Gagal menghapus data karyawan'
+    });
   }
 });
 

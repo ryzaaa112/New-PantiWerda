@@ -70,6 +70,15 @@ export const residentsAPI = {
   delete: (id) => api.delete(`/residents/${id}`),
 };
 
+// Employees
+export const employeesAPI = {
+  getAll: (filters = {}) => api.get('/employees', { params: filters }),
+  getById: (id) => api.get(`/employees/${id}`),
+  create: (data) => api.post('/employees', data),
+  update: (id, data) => api.put(`/employees/${id}`, data),
+  delete: (id) => api.delete(`/employees/${id}`),
+};
+
 // Daily Records
 export const recordsAPI = {
   getAll: (filters = {}) => api.get('/records', { params: filters }),

@@ -11,6 +11,9 @@ import Login from './components/Login';
 import LoadingSpinner from './components/LoadingSpinner';
 import RoomManagement from './components/RoomManagement';
 import './App.css';
+import EmployeeList from './components/EmployeeList';
+import InputEmployee from './components/InputEmployee';
+import EmployeeDetail from  './components/EmployeeDetail';
 
 function App() {
   const [currentPage, setCurrentPage] = useState('dashboard');
@@ -18,6 +21,7 @@ function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [user, setUser] = useState(null);
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState(null);
 
   // Check authentication on mount with better validation
   useEffect(() => {
@@ -74,6 +78,11 @@ function App() {
     setCurrentPage('detail');
   };
 
+  const showEmployeeDetail = (employeeId) => {
+  setSelectedEmployeeId(employeeId);
+  setCurrentPage('ed');
+};
+
   const handleLogin = (userData, token) => {
     localStorage.setItem('token', token);
     localStorage.setItem('user', JSON.stringify(userData));
@@ -129,6 +138,34 @@ function App() {
           navigateTo('dashboard');
           return null;
         }
+      case 'el':
+        //only admin can access employees info
+        if (user.role === 'admin') {
+          return <EmployeeList navigateTo={navigateTo} showDetail={showEmployeeDetail} />;          
+        } else {
+          alert('Akses ditolak. Hanya admin yang dapat mengakses data karyawan.');
+          navigateTo('dashboard');
+          return null;
+        }
+      case 'ie':
+        //only admin can access employees info
+        if (user.role === 'admin') {
+          return <InputEmployee navigateTo={navigateTo} />;          
+        } else {
+          alert('Akses ditolak. Hanya admin yang dapat mengakses data karyawan.');
+          navigateTo('dashboard');
+          return null;
+        }
+      case 'ed':
+        //only admin can access employees info
+        if (user.role === 'admin') {
+          return <EmployeeDetail navigateTo={navigateTo} employeeId={selectedEmployeeId} />;          
+        } else {
+          alert('Akses ditolak. Hanya admin yang dapat mengakses data karyawan.');
+          navigateTo('dashboard');
+          return null;
+        }
+
       default:
         return <Dashboard navigateTo={navigateTo} user={user} onLogout={handleLogout} />;
     }

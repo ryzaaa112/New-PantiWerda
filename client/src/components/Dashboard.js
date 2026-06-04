@@ -73,6 +73,27 @@ const Dashboard = ({ navigateTo, user, onLogout }) => {
       description: 'Kelola akun staff dan administrator',
       page: 'users',
       allowedRoles: ['admin']  // Still admin only
+    },
+    {
+      icon: 'fas fa-user-tie',
+      title: 'Data Karyawan',
+      description: 'Lihat dan tambahkan data karyawan baru ke dalam sistem',
+      page: 'el',
+      allowedRoles: ['admin']  // Still admin only
+    },
+    {
+      icon: 'fas fa-calendar-check',
+      title: 'Absensi Karyawan',
+      description: 'Catat absensi karyawan panti',
+      page: 'users',
+      allowedRoles: ['admin']  // Still admin only
+    },
+    {
+      icon: 'fas fa-calculator',
+      title: 'Rekap Gaji karyawan',
+      description: 'Menghitung total gaji karyawan yang perlu dibayar',
+      page: 'users',
+      allowedRoles: ['admin']  // Still admin only
     }
   ];
 
