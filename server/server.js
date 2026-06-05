@@ -2316,6 +2316,59 @@ app.post('/api/employees', async (req, res) => {
   }
 });
 
+// UPDATE EMPLOYEE
+app.put('/api/employees/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const {
+      religion,
+      phone,
+      address,
+      position,
+      salary,
+      salary_type,
+      additional_variable,
+      bpjs
+    } = req.body;
+
+    await db.run(`
+      UPDATE employees
+      SET
+        religion = ?,
+        phone = ?,
+        address = ?,
+        position = ?,
+        salary = ?,
+        salary_type = ?,
+        additional_variable = ?,
+        bpjs = ?
+      WHERE id = ?
+    `, [
+      religion,
+      phone,
+      address,
+      position,
+      salary,
+      salary_type,
+      additional_variable,
+      bpjs,
+      id
+    ]);
+
+    res.json({
+      success: true,
+      message: 'Data karyawan berhasil diperbarui'
+    });
+
+  } catch (error) {
+    console.error('Error updating employee:', error);
+
+    res.status(500).json({
+      error: 'Gagal memperbarui data karyawan'
+    });
+  }
+});
 
 // DELETE EMPLOYEE
 app.delete('/api/employees/:id', async (req, res) => {

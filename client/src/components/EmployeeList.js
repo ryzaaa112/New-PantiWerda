@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { employeesAPI } from '../services/api';
-import { calculateAge, formatDate } from '../utils/helpers';
+import { calculateAge } from '../utils/helpers';
 
 const EmployeeList = ({ navigateTo, showDetail }) => {
   const [employees, setemployees] = useState([]);
@@ -14,29 +14,25 @@ const EmployeeList = ({ navigateTo, showDetail }) => {
   const fetchemployees = async () => {
     try {
       const data = await employeesAPI.getAll();
-      // We need to fetch room information for each employee
-      const employeesWithRooms = await Promise.all(
-        data.map(async (employee) => {
-          try {
-            // If you have an API endpoint that returns employee with room info
-            const employeeDetail = await employeesAPI.getById(employee.id);
-            return {
-              ...employee,
-              room_name: employeeDetail.room_name || null,
-              room_type: employeeDetail.room_type || null
-            };
-          } catch (error) {
-            console.error(`Error fetching room for employee ${employee.id}:`, error);
-            return employee;
-          }
-        })
-      );
-      setemployees(employeesWithRooms);
+
+      setemployees(data || []);
     } catch (error) {
       console.error('Error fetching employees:', error);
     } finally {
       setLoading(false);
     }
+  };
+
+  const formatCurrency = (value) => {
+    if (!value || value === '-') {
+      return '-';
+    }
+
+    return new Intl.NumberFormat('id-ID', {
+      style: 'currency',
+      currency: 'IDR',
+      minimumFractionDigits: 0
+    }).format(value);
   };
 
   // Filter employees based on search term
@@ -118,39 +114,36 @@ const EmployeeList = ({ navigateTo, showDetail }) => {
                   </div>
                   <h5 style={{ margin: 0, fontSize: '1.3rem' }}>{employee.name}</h5>
                   <p style={{ margin: '5px 0 0 0', opacity: 0.9 }}>
-                    {type} • {age || '?'} Tahun • ID: {employee.employee_id}
+                    {type} • {age || '?'}
                   </p>
                 </div>
-                <div className="profile-body">
-                  <div className="profile-info-item">
-                    <i className="fas fa-heartbeat"></i>
-                    <span><strong>Kondisi:</strong> {employee.condition || 'Tidak ada data'}</span>
-                  </div>
 
-                  {/* NEW: Room Information */}
+                <div className="profile-body">
+
                   <div className="profile-info-item">
-                    <i className="fas fa-bed"></i>
+                    <i className="fas fa-briefcase"></i>
                     <span>
-                      <strong>Ruangan:</strong> {employee.room_name || 'Belum ditugaskan'}
-                      {employee.room_name && (
-                        <span className="badge bg-info ms-2">
-                          {employee.room_type === 'private' ? 'Pribadi' :
-                            employee.room_type === 'shared' ? 'Bersama' : 'Khusus'}
-                        </span>
-                      )}
+                      <strong>Jabatan:</strong> {employee.position || 'Tidak ada data'}
                     </span>
                   </div>
 
                   <div className="profile-info-item">
-                    <i className="fas fa-calendar"></i>
-                    <span><strong>Masuk:</strong> {formatDate(employee.join_date) || '-'}</span>
+                    <i className="fas fa-money-bill-wave"></i>
+                    <span>
+                      <strong>Gaji:</strong> {formatCurrency(employee.salary)}
+                    </span>
+                  </div>
+
+                  <div className="profile-info-item">
+                    <i className="fas fa-wallet"></i>
+                    <span>
+                      <strong>Tipe Gaji:</strong> {employee.salary_type || '-'}
+                    </span>
                   </div>
 
                   <div className="mt-3 d-flex justify-content-between align-items-center">
-                    <span className={`badge ${employee.status === 'Perlu Perhatian' ? 'bg-warning text-dark' :
-                      employee.status === 'Keluar' ? 'bg-secondary' :
-                        employee.status === 'Meninggal' ? 'bg-dark' : 'bg-success'} badge-custom`}>
-                      {employee.status || 'Aktif'}
+                    <span className="badge bg-success badge-custom">
+                      Aktif
                     </span>
 
                     <button

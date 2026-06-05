@@ -31,6 +31,15 @@ const InputEmployee = ({ navigateTo }) => {
 
   // ================= VALIDATION =================
 
+  const validateReligion = (religion) => {
+
+    if (!religion) {
+      return 'Agama wajib dipilih';
+    }
+
+    return '';
+  };
+
   const validatePhone = (phone) => {
 
     if (!phone) return 'Nomor telepon wajib diisi';
@@ -63,37 +72,39 @@ const InputEmployee = ({ navigateTo }) => {
     return '';
   };
 
-const validateBPJS = (bpjs) => {
-  if (!bpjs) {
-    return 'Nomor BPJS wajib diisi. Jika tidak ada, isi dengan -';
-  }
+  const validateBPJS = (bpjs) => {
 
-  if (bpjs === '-') {
+    if (!bpjs) {
+      return 'Nomor BPJS wajib diisi. Jika tidak ada, isi dengan -';
+    }
+
+    if (bpjs === '-') {
+      return '';
+    }
+
+    if (!/^\d+$/.test(bpjs)) {
+      return 'Nomor BPJS harus berupa angka atau isi dengan - jika tidak ada';
+    }
+
     return '';
-  }
+  };
 
-  if (!/^\d+$/.test(bpjs)) {
-    return 'Nomor BPJS harus berupa angka atau isi dengan - jika tidak ada';
-  }
+  const validateAdditional_variable = (additional_variable) => {
 
-  return '';
-};
+    if (!additional_variable) {
+      return 'Variabel tambahan wajib diisi. Jika tidak ada, isi dengan -';
+    }
 
-const validateAdditional_variable = (additional_variable) => {
-  if (!additional_variable) {
-    return 'Variabel tambahan wajib diisi. Jika tidak ada, isi dengan -';
-  }
+    if (additional_variable === '-') {
+      return '';
+    }
 
-  if (additional_variable === '-') {
+    if (!/^\d+$/.test(additional_variable)) {
+      return 'Variabel tambahan harus berupa angka atau isi dengan - jika tidak ada';
+    }
+
     return '';
-  }
-
-  if (!/^\d+$/.test(additional_variable)) {
-    return 'Variabel tambahan harus berupa angka atau isi dengan - jika tidak ada';
-  }
-
-  return '';
-};
+  };
 
   // ================= HANDLE CHANGE =================
 
@@ -108,7 +119,11 @@ const validateAdditional_variable = (additional_variable) => {
 
     let error = '';
 
-    if (name === 'phone') {
+    if (name === 'religion') {
+      error = validateReligion(value);
+    }
+
+    else if (name === 'phone') {
       error = validatePhone(value);
     }
 
@@ -119,6 +134,7 @@ const validateAdditional_variable = (additional_variable) => {
     else if (name === 'bpjs') {
       error = validateBPJS(value);
     }
+
     else if (name === 'additional_variable') {
       error = validateAdditional_variable(value);
     }
@@ -136,12 +152,14 @@ const validateAdditional_variable = (additional_variable) => {
 
     e.preventDefault();
 
+    const religionError = validateReligion(formData.religion);
     const phoneError = validatePhone(formData.phone);
     const salaryError = validateSalary(formData.salary);
     const bpjsError = validateBPJS(formData.bpjs);
-    const additional_variableError = additional_variable(formData.additional_variable);
+    const additional_variableError = validateAdditional_variable(formData.additional_variable);
 
     const errors = {
+      religion: religionError,
       phone: phoneError,
       salary: salaryError,
       bpjs: bpjsError,
@@ -150,7 +168,13 @@ const validateAdditional_variable = (additional_variable) => {
 
     setEmployeeErrors(errors);
 
-    if (phoneError || salaryError || bpjsError) {
+    if (
+      religionError ||
+      phoneError ||
+      salaryError ||
+      bpjsError ||
+      additional_variableError
+    ) {
       alert('❌ Mohon perbaiki data yang masih salah');
       return;
     }
@@ -272,11 +296,11 @@ const validateAdditional_variable = (additional_variable) => {
             <div className="col-md-6">
 
               <label className="form-label">
-                Agama
+                Agama *
               </label>
 
               <select
-                className="form-select"
+                className={`form-select ${employeeErrors.religion ? 'is-invalid' : ''}`}
                 name="religion"
                 value={formData.religion}
                 onChange={handleChange}
@@ -291,6 +315,12 @@ const validateAdditional_variable = (additional_variable) => {
                 <option value="Konghucu">Konghucu</option>
                 <option value="Lainnya">Lainnya</option>
               </select>
+
+              {employeeErrors.religion && (
+                <div className="invalid-feedback">
+                  {employeeErrors.religion}
+                </div>
+              )}
 
             </div>
 
@@ -448,7 +478,8 @@ const validateAdditional_variable = (additional_variable) => {
             </div>
 
             {/* VARIABEL TAMBAHAN */}
-            <div className="col-6">
+            <div className="col-md-6">
+
               <label className="form-label">
                 Variabel Tambahan *
               </label>
@@ -468,6 +499,7 @@ const validateAdditional_variable = (additional_variable) => {
                   {employeeErrors.additional_variable}
                 </div>
               )}
+
             </div>
 
           </div>
