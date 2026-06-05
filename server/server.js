@@ -600,7 +600,20 @@ async function createTables() {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
-
+      await db.run(`
+  CREATE TABLE IF NOT EXISTS employee_attendance (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    employee_id INTEGER NOT NULL,
+    attendance_date TEXT NOT NULL,
+    status TEXT NOT NULL CHECK (status IN ('H', 'S', 'I', 'A', 'O', 'K')),
+    notes TEXT,
+    recorded_by TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(employee_id, attendance_date),
+    FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
+  )
+`);
     // Create rooms table first
     await db.run(`
       CREATE TABLE IF NOT EXISTS rooms (
@@ -1718,6 +1731,320 @@ app.use((req, res, next) => {
   next();
 });
 
+const attendanceStatuses = {
+  H: 'Hadir',
+  S: 'Sakit',
+  I: 'Izin',
+  A: 'Alpa',
+  O: 'Off',
+  K: 'Kebijakan',
+};
+
+function isValidMonth(month) {
+  return /^\d{4}-\d{2}$/.test(month || '');
+}
+
+function isValidDateValue(dateValue) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(dateValue || '');
+}
+
+function getDaysInMonth(month) {
+  const [year, monthNumber] = month.split('-').map(Number);
+  return new Date(year, monthNumber, 0).getDate();
+}
+
+function csvEscape(value) {
+  const text = value === null || value === undefined ? '' : String(value);
+  return `"${text.replace(/"/g, '""')}"`;
+}
+
+// Ambil absensi 1 bulan
+app.get('/api/employee-attendance', async (req, res) => {
+  try {
+    const month = req.query.month || new Date().toISOString().slice(0, 7);
+
+    if (!isValidMonth(month)) {
+      return res.status(400).json({
+        error: 'Format bulan harus YYYY-MM, contoh: 2026-01',
+      });
+    }
+
+    const daysInMonth = getDaysInMonth(month);
+    const startDate = `${month}-01`;
+    const endDate = `${month}-${String(daysInMonth).padStart(2, '0')}`;
+
+    const employees = await db.all(`
+      SELECT id, name, gender, position, salary, salary_type
+      FROM employees
+      ORDER BY name ASC
+    `);
+
+    const rows = await db.all(
+      `
+      SELECT id, employee_id, attendance_date, status, notes
+      FROM employee_attendance
+      WHERE attendance_date BETWEEN ? AND ?
+      ORDER BY attendance_date ASC
+    `,
+      [startDate, endDate]
+    );
+
+    const attendanceByEmployee = {};
+
+    for (const row of rows) {
+      const day = Number(row.attendance_date.split('-')[2]);
+
+      if (!attendanceByEmployee[row.employee_id]) {
+        attendanceByEmployee[row.employee_id] = {};
+      }
+
+      attendanceByEmployee[row.employee_id][day] = {
+        id: row.id,
+        status: row.status,
+        notes: row.notes || '',
+      };
+    }
+
+    const data = employees.map((employee) => {
+      const attendance = attendanceByEmployee[employee.id] || {};
+
+      const summary = Object.values(attendance).reduce(
+        (acc, item) => {
+          acc[item.status] = (acc[item.status] || 0) + 1;
+          return acc;
+        },
+        { H: 0, S: 0, I: 0, A: 0, O: 0, K: 0 }
+      );
+
+      return {
+        ...employee,
+        attendance,
+        summary,
+        total_present: summary.H || 0,
+        total_absent: summary.A || 0,
+      };
+    });
+
+    res.json({
+      month,
+      daysInMonth,
+      statuses: attendanceStatuses,
+      employees: data,
+    });
+  } catch (error) {
+    console.error('Error fetching employee attendance:', error);
+    res.status(500).json({ error: 'Gagal mengambil data absensi karyawan' });
+  }
+});
+
+// Simpan absensi 1 cell
+app.post('/api/employee-attendance', async (req, res) => {
+  try {
+    const { employee_id, attendance_date, status, notes, recorded_by } = req.body;
+
+    if (!employee_id || !isValidDateValue(attendance_date)) {
+      return res.status(400).json({
+        error: 'employee_id dan attendance_date wajib diisi',
+      });
+    }
+
+    const employee = await db.get('SELECT id FROM employees WHERE id = ?', [
+      employee_id,
+    ]);
+
+    if (!employee) {
+      return res.status(404).json({ error: 'Karyawan tidak ditemukan' });
+    }
+
+    if (!status) {
+      await db.run(
+        'DELETE FROM employee_attendance WHERE employee_id = ? AND attendance_date = ?',
+        [employee_id, attendance_date]
+      );
+
+      return res.json({
+        success: true,
+        message: 'Absensi berhasil dikosongkan',
+      });
+    }
+
+    if (!attendanceStatuses[status]) {
+      return res.status(400).json({
+        error: 'Status absensi tidak valid. Gunakan H, S, I, A, O, atau K',
+      });
+    }
+
+    const result = await db.run(
+      `
+      INSERT INTO employee_attendance 
+      (employee_id, attendance_date, status, notes, recorded_by)
+      VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(employee_id, attendance_date) DO UPDATE SET
+        status = excluded.status,
+        notes = excluded.notes,
+        recorded_by = excluded.recorded_by,
+        updated_at = CURRENT_TIMESTAMP
+    `,
+      [employee_id, attendance_date, status, notes || '', recorded_by || 'admin']
+    );
+
+    const saved = await db.get(
+      `
+      SELECT *
+      FROM employee_attendance
+      WHERE employee_id = ? AND attendance_date = ?
+    `,
+      [employee_id, attendance_date]
+    );
+
+    res.json({
+      success: true,
+      message: 'Absensi berhasil disimpan',
+      data: saved,
+      id: result.lastID,
+    });
+  } catch (error) {
+    console.error('Error saving employee attendance:', error);
+    res.status(500).json({ error: 'Gagal menyimpan absensi karyawan' });
+  }
+});
+
+// Tandai semua karyawan hadir pada tanggal tertentu
+app.post('/api/employee-attendance/mark-all', async (req, res) => {
+  try {
+    const { attendance_date, status = 'H', recorded_by } = req.body;
+
+    if (!isValidDateValue(attendance_date)) {
+      return res.status(400).json({
+        error: 'attendance_date wajib format YYYY-MM-DD',
+      });
+    }
+
+    if (!attendanceStatuses[status]) {
+      return res.status(400).json({
+        error: 'Status absensi tidak valid. Gunakan H, S, I, A, O, atau K',
+      });
+    }
+
+    const employees = await db.all('SELECT id FROM employees');
+
+    for (const employee of employees) {
+      await db.run(
+        `
+        INSERT INTO employee_attendance 
+        (employee_id, attendance_date, status, notes, recorded_by)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(employee_id, attendance_date) DO UPDATE SET
+          status = excluded.status,
+          notes = excluded.notes,
+          recorded_by = excluded.recorded_by,
+          updated_at = CURRENT_TIMESTAMP
+      `,
+        [employee.id, attendance_date, status, '', recorded_by || 'admin']
+      );
+    }
+
+    res.json({
+      success: true,
+      message: `Berhasil menandai ${employees.length} karyawan`,
+      total: employees.length,
+    });
+  } catch (error) {
+    console.error('Error marking all employee attendance:', error);
+    res.status(500).json({
+      error: 'Gagal menandai semua absensi karyawan',
+    });
+  }
+});
+
+// Export absensi ke CSV, bisa dibuka Excel
+app.get('/api/employee-attendance/export', async (req, res) => {
+  try {
+    const month = req.query.month || new Date().toISOString().slice(0, 7);
+
+    if (!isValidMonth(month)) {
+      return res.status(400).json({
+        error: 'Format bulan harus YYYY-MM, contoh: 2026-01',
+      });
+    }
+
+    const daysInMonth = getDaysInMonth(month);
+    const startDate = `${month}-01`;
+    const endDate = `${month}-${String(daysInMonth).padStart(2, '0')}`;
+
+    const employees = await db.all(`
+      SELECT id, name, position
+      FROM employees
+      ORDER BY name ASC
+    `);
+
+    const rows = await db.all(
+      `
+      SELECT employee_id, attendance_date, status
+      FROM employee_attendance
+      WHERE attendance_date BETWEEN ? AND ?
+    `,
+      [startDate, endDate]
+    );
+
+    const attendanceByEmployee = {};
+
+    for (const row of rows) {
+      const day = Number(row.attendance_date.split('-')[2]);
+
+      if (!attendanceByEmployee[row.employee_id]) {
+        attendanceByEmployee[row.employee_id] = {};
+      }
+
+      attendanceByEmployee[row.employee_id][day] = row.status;
+    }
+
+    const header = ['Nama', 'Posisi'];
+
+    for (let day = 1; day <= daysInMonth; day++) {
+      header.push(String(day));
+    }
+
+    header.push('Total Hadir', 'Total Alpa');
+
+    const csvRows = [header.map(csvEscape).join(',')];
+
+    for (const employee of employees) {
+      const attendance = attendanceByEmployee[employee.id] || {};
+      let totalHadir = 0;
+      let totalAlpa = 0;
+
+      const row = [employee.name, employee.position || '-'];
+
+      for (let day = 1; day <= daysInMonth; day++) {
+        const status = attendance[day] || '';
+
+        if (status === 'H') totalHadir += 1;
+        if (status === 'A') totalAlpa += 1;
+
+        row.push(status);
+      }
+
+      row.push(totalHadir, totalAlpa);
+      csvRows.push(row.map(csvEscape).join(','));
+    }
+
+    const csvContent = '\ufeff' + csvRows.join('\n');
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="absensi-karyawan-${month}.csv"`
+    );
+
+    res.send(csvContent);
+  } catch (error) {
+    console.error('Error exporting employee attendance:', error);
+    res.status(500).json({
+      error: 'Gagal export absensi karyawan',
+    });
+  }
+});
 // Error handling yang lebih baik
 app.use((err, req, res, next) => {
   console.error('Server Error:', err.stack);

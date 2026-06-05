@@ -139,8 +139,7 @@ const validateAdditional_variable = (additional_variable) => {
     const phoneError = validatePhone(formData.phone);
     const salaryError = validateSalary(formData.salary);
     const bpjsError = validateBPJS(formData.bpjs);
-    const additional_variableError = additional_variable(formData.additional_variable);
-
+    const additional_variableError = validateAdditional_variable(formData.additional_variable);
     const errors = {
       phone: phoneError,
       salary: salaryError,
@@ -150,7 +149,7 @@ const validateAdditional_variable = (additional_variable) => {
 
     setEmployeeErrors(errors);
 
-    if (phoneError || salaryError || bpjsError) {
+    if (phoneError || salaryError || bpjsError || additional_variableError) {
       alert('❌ Mohon perbaiki data yang masih salah');
       return;
     }
