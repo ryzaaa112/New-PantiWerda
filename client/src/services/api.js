@@ -134,5 +134,18 @@ export const roomsAPI = {
   assignRoom: (residentId, data) => api.put(`/residents/${residentId}/assign-room`, data),
   getOccupancyReport: () => api.get('/rooms/occupancy-report')
 };
+export const attendanceAPI = {
+  getMonthly: (month) => api.get('/employee-attendance', { params: { month } }),
+
+  save: (data) => api.post('/employee-attendance', data),
+
+  markAll: (data) => api.post('/employee-attendance/mark-all', data),
+
+  exportExcel: (month) =>
+    api.get('/employee-attendance/export', {
+      params: { month },
+      responseType: 'blob',
+    }),
+};
 
 export default api;

@@ -85,7 +85,7 @@ const Dashboard = ({ navigateTo, user, onLogout }) => {
       icon: 'fas fa-calendar-check',
       title: 'Absensi Karyawan',
       description: 'Catat absensi karyawan panti',
-      page: 'users',
+      page: 'attendance',
       allowedRoles: ['admin']  // Still admin only
     },
     {
