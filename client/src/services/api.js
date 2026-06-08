@@ -79,6 +79,29 @@ export const employeesAPI = {
   delete: (id) => api.delete(`/employees/${id}`),
 };
 
+// Employee Loans
+export const employeeLoansAPI = {
+  getByEmployee: (employeeId, year) => api.get(`/employees/${employeeId}/loans`, {
+    params: { year }
+  }),
+
+  create: (employeeId, data) => api.post(`/employees/${employeeId}/loans`, data),
+
+  updateInstallmentStatus: (installmentId, status) => api.put(
+    `/employee-loan-installments/${installmentId}/status`,
+    { status }
+  )
+};
+
+// Employee Payrolls
+export const employeePayrollsAPI = {
+  getMonthly: (month) => api.get('/employee-payrolls', {
+    params: { month }
+  }),
+
+  payEmployee: (data) => api.post('/employee-payrolls/pay', data)
+};
+
 // Daily Records
 export const recordsAPI = {
   getAll: (filters = {}) => api.get('/records', { params: filters }),

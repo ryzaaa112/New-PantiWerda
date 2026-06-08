@@ -15,6 +15,7 @@ import EmployeeList from './components/EmployeeList';
 import InputEmployee from './components/InputEmployee';
 import EmployeeDetail from  './components/EmployeeDetail';
 import Attendance from './components/Attendance';
+import EmployeePayroll from './components/EmployeePayroll';
 
 function App() {
   const [currentPage, setCurrentPage] = useState('dashboard');
@@ -65,7 +66,7 @@ function App() {
     if (user) {
       // Staff cannot access donation or user management
       if (user.role === 'staff') {
-        if (page === 'donation' || page === 'users' || page === 'attendance') {
+        if (page === 'donation' || page === 'users' || page === 'attendance' || page==='payroll') {
           alert('Akses ditolak. Hanya admin yang dapat mengakses halaman ini.');
           return;
         }
@@ -166,18 +167,26 @@ function App() {
           navigateTo('dashboard');
           return null;
         }
+      case 'attendance':
+        if (user.role === 'admin') {
+          return <Attendance navigateTo={navigateTo} user={user} />;
+        } else {
+          alert('Akses ditolak. Hanya admin yang dapat mengakses absensi karyawan.');
+          navigateTo('dashboard');
+          return null;
+        }
+      case 'payroll':
+        if (user.role === 'admin') {
+          return <EmployeePayroll navigateTo={navigateTo} user={user} />;
+        } else {
+          alert('Akses ditolak. Hanya admin yang dapat mengakses rekap gaji.');
+          navigateTo('dashboard');
+          return null;
+        }
 
       default:
         return <Dashboard navigateTo={navigateTo} user={user} onLogout={handleLogout} />;
       
-        case 'attendance':
-  if (user.role === 'admin') {
-    return <Attendance navigateTo={navigateTo} user={user} />;
-  } else {
-    alert('Akses ditolak. Hanya admin yang dapat mengakses absensi karyawan.');
-    navigateTo('dashboard');
-    return null;
-  }
     }
   };
 

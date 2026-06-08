@@ -92,7 +92,7 @@ const Dashboard = ({ navigateTo, user, onLogout }) => {
       icon: 'fas fa-calculator',
       title: 'Rekap Gaji karyawan',
       description: 'Menghitung total gaji karyawan yang perlu dibayar',
-      page: 'users',
+      page: 'payroll',
       allowedRoles: ['admin']  // Still admin only
     }
   ];

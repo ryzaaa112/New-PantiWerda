@@ -582,7 +582,60 @@ async function initializeDatabase() {
 
 async function createTables() {
   try {
-        // EMPLOYEES TABLE
+    // EMPLOYEE PAYROLLS TABLE
+    await db.run(`
+      CREATE TABLE IF NOT EXISTS employee_payrolls (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        employee_id INTEGER NOT NULL,
+        payroll_month TEXT NOT NULL,
+        base_salary INTEGER NOT NULL DEFAULT 0,
+        additional_variable INTEGER NOT NULL DEFAULT 0,
+        bpjs_deduction INTEGER NOT NULL DEFAULT 0,
+        loan_deduction INTEGER NOT NULL DEFAULT 0,
+        total_salary INTEGER NOT NULL DEFAULT 0,
+        status TEXT DEFAULT 'Belum Dibayar' CHECK (status IN ('Belum Dibayar', 'Sudah Dibayar')),
+        paid_at DATETIME,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(employee_id, payroll_month),
+        FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
+      )
+    `);
+
+    //EMPLOYEE LOANS TABLE
+    await db.exec(`
+      CREATE TABLE IF NOT EXISTS employee_loans (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        employee_id INTEGER NOT NULL,
+        total_amount INTEGER NOT NULL,
+        monthly_installment INTEGER NOT NULL,
+        remaining_amount INTEGER NOT NULL,
+        start_month INTEGER NOT NULL,
+        start_year INTEGER NOT NULL,
+        target_month INTEGER NOT NULL,
+        target_year INTEGER NOT NULL,
+        status TEXT DEFAULT 'Aktif',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
+      )
+    `);
+
+    await db.exec(`
+      CREATE TABLE IF NOT EXISTS employee_loan_installments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        loan_id INTEGER NOT NULL,
+        employee_id INTEGER NOT NULL,
+        month INTEGER NOT NULL,
+        year INTEGER NOT NULL,
+        bill_amount INTEGER NOT NULL,
+        remaining_after INTEGER NOT NULL,
+        status TEXT DEFAULT 'BELUM BAYAR',
+        paid_at DATETIME,
+        FOREIGN KEY (loan_id) REFERENCES employee_loans(id) ON DELETE CASCADE,
+        FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
+      )
+    `);
+    // EMPLOYEES TABLE
     await db.run(`
       CREATE TABLE IF NOT EXISTS employees (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -600,20 +653,20 @@ async function createTables() {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
-      await db.run(`
-  CREATE TABLE IF NOT EXISTS employee_attendance (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    employee_id INTEGER NOT NULL,
-    attendance_date TEXT NOT NULL,
-    status TEXT NOT NULL CHECK (status IN ('H', 'S', 'I', 'A', 'O', 'K')),
-    notes TEXT,
-    recorded_by TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(employee_id, attendance_date),
-    FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
-  )
-`);
+    await db.run(`
+      CREATE TABLE IF NOT EXISTS employee_attendance (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        employee_id INTEGER NOT NULL,
+        attendance_date TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('H', 'S', 'I', 'A', 'O', 'K')),
+        notes TEXT,
+        recorded_by TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(employee_id, attendance_date),
+        FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
+      )
+    `);
     // Create rooms table first
     await db.run(`
       CREATE TABLE IF NOT EXISTS rooms (
@@ -2720,6 +2773,292 @@ app.delete('/api/employees/:id', async (req, res) => {
   }
 });
 
+// ================= EMPLOYEE PAYROLL API =================
+
+const parseMoneyValue = (value) => {
+  if (value === null || value === undefined || value === '' || value === '-') {
+    return 0;
+  }
+
+  const numberValue = Number(value);
+
+  if (Number.isNaN(numberValue)) {
+    return 0;
+  }
+
+  return numberValue;
+};
+
+// GET PAYROLL SUMMARY BY MONTH
+app.get('/api/employee-payrolls', async (req, res) => {
+  try {
+    const payrollMonth = req.query.month || new Date().toISOString().slice(0, 7);
+
+    if (!/^\d{4}-\d{2}$/.test(payrollMonth)) {
+      return res.status(400).json({
+        error: 'Format bulan harus YYYY-MM, contoh: 2026-06'
+      });
+    }
+
+    const [year, month] = payrollMonth.split('-').map(Number);
+
+    const employees = await db.all(`
+      SELECT *
+      FROM employees
+      ORDER BY name ASC
+    `);
+
+    const payrolls = [];
+
+    for (const employee of employees) {
+      const savedPayroll = await db.get(`
+        SELECT *
+        FROM employee_payrolls
+        WHERE employee_id = ?
+        AND payroll_month = ?
+      `, [employee.id, payrollMonth]);
+
+      const currentLoanInstallment = await db.get(`
+        SELECT eli.*
+        FROM employee_loan_installments eli
+        JOIN employee_loans el ON eli.loan_id = el.id
+        WHERE eli.employee_id = ?
+        AND eli.month = ?
+        AND eli.year = ?
+        AND el.status = 'Aktif'
+        LIMIT 1
+      `, [employee.id, month, year]);
+
+      const baseSalary = parseMoneyValue(employee.salary);
+      const additionalVariable = parseMoneyValue(employee.additional_variable);
+      const bpjsDeduction = parseMoneyValue(employee.bpjs);
+
+      const loanDeduction =
+        currentLoanInstallment && currentLoanInstallment.status !== 'SUDAH BAYAR'
+          ? parseMoneyValue(currentLoanInstallment.bill_amount)
+          : 0;
+
+      const totalSalary =
+        baseSalary + additionalVariable - bpjsDeduction - loanDeduction;
+
+      payrolls.push({
+        employee_id: employee.id,
+        employee_name: employee.name,
+        position: employee.position,
+        salary_type: employee.salary_type,
+
+        base_salary: savedPayroll ? savedPayroll.base_salary : baseSalary,
+        additional_variable: savedPayroll ? savedPayroll.additional_variable : additionalVariable,
+        bpjs_deduction: savedPayroll ? savedPayroll.bpjs_deduction : bpjsDeduction,
+        loan_deduction: savedPayroll ? savedPayroll.loan_deduction : loanDeduction,
+        total_salary: savedPayroll ? savedPayroll.total_salary : totalSalary,
+
+        status: savedPayroll ? savedPayroll.status : 'Belum Dibayar',
+        paid_at: savedPayroll ? savedPayroll.paid_at : null,
+
+        loan_installment_id: currentLoanInstallment ? currentLoanInstallment.id : null,
+        loan_installment_status: currentLoanInstallment ? currentLoanInstallment.status : null
+      });
+    }
+
+    const summary = payrolls.reduce(
+      (acc, item) => {
+        acc.total_base_salary += item.base_salary;
+        acc.total_additional_variable += item.additional_variable;
+        acc.total_bpjs_deduction += item.bpjs_deduction;
+        acc.total_loan_deduction += item.loan_deduction;
+        acc.total_salary += item.total_salary;
+
+        if (item.status === 'Sudah Dibayar') {
+          acc.total_paid += 1;
+        } else {
+          acc.total_unpaid += 1;
+        }
+
+        return acc;
+      },
+      {
+        total_base_salary: 0,
+        total_additional_variable: 0,
+        total_bpjs_deduction: 0,
+        total_loan_deduction: 0,
+        total_salary: 0,
+        total_paid: 0,
+        total_unpaid: 0
+      }
+    );
+
+    res.json({
+      payroll_month: payrollMonth,
+      payrolls,
+      summary
+    });
+
+  } catch (error) {
+    console.error('Error fetching employee payrolls:', error);
+
+    res.status(500).json({
+      error: 'Gagal mengambil data rekap gaji karyawan'
+    });
+  }
+});
+
+
+// PAY ONE EMPLOYEE SALARY
+app.post('/api/employee-payrolls/pay', async (req, res) => {
+  try {
+    const { employee_id, payroll_month } = req.body;
+
+    if (!employee_id || !payroll_month) {
+      return res.status(400).json({
+        error: 'employee_id dan payroll_month wajib diisi'
+      });
+    }
+
+    if (!/^\d{4}-\d{2}$/.test(payroll_month)) {
+      return res.status(400).json({
+        error: 'Format bulan harus YYYY-MM'
+      });
+    }
+
+    const employee = await db.get(`
+      SELECT *
+      FROM employees
+      WHERE id = ?
+    `, [employee_id]);
+
+    if (!employee) {
+      return res.status(404).json({
+        error: 'Karyawan tidak ditemukan'
+      });
+    }
+
+    const existingPayroll = await db.get(`
+      SELECT *
+      FROM employee_payrolls
+      WHERE employee_id = ?
+      AND payroll_month = ?
+    `, [employee_id, payroll_month]);
+
+    if (existingPayroll && existingPayroll.status === 'Sudah Dibayar') {
+      return res.status(400).json({
+        error: 'Gaji karyawan bulan ini sudah dibayar'
+      });
+    }
+
+    const [year, month] = payroll_month.split('-').map(Number);
+
+    const currentLoanInstallment = await db.get(`
+      SELECT eli.*
+      FROM employee_loan_installments eli
+      JOIN employee_loans el ON eli.loan_id = el.id
+      WHERE eli.employee_id = ?
+      AND eli.month = ?
+      AND eli.year = ?
+      AND el.status = 'Aktif'
+      LIMIT 1
+    `, [employee_id, month, year]);
+
+    const baseSalary = parseMoneyValue(employee.salary);
+    const additionalVariable = parseMoneyValue(employee.additional_variable);
+    const bpjsDeduction = parseMoneyValue(employee.bpjs);
+
+    const loanDeduction =
+      currentLoanInstallment && currentLoanInstallment.status !== 'SUDAH BAYAR'
+        ? parseMoneyValue(currentLoanInstallment.bill_amount)
+        : 0;
+
+    const totalSalary =
+      baseSalary + additionalVariable - bpjsDeduction - loanDeduction;
+
+    await db.run('BEGIN TRANSACTION');
+
+    try {
+      await db.run(`
+        INSERT INTO employee_payrolls (
+          employee_id,
+          payroll_month,
+          base_salary,
+          additional_variable,
+          bpjs_deduction,
+          loan_deduction,
+          total_salary,
+          status,
+          paid_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, 'Sudah Dibayar', CURRENT_TIMESTAMP)
+        ON CONFLICT(employee_id, payroll_month) DO UPDATE SET
+          base_salary = excluded.base_salary,
+          additional_variable = excluded.additional_variable,
+          bpjs_deduction = excluded.bpjs_deduction,
+          loan_deduction = excluded.loan_deduction,
+          total_salary = excluded.total_salary,
+          status = 'Sudah Dibayar',
+          paid_at = CURRENT_TIMESTAMP,
+          updated_at = CURRENT_TIMESTAMP
+      `, [
+        employee_id,
+        payroll_month,
+        baseSalary,
+        additionalVariable,
+        bpjsDeduction,
+        loanDeduction,
+        totalSalary
+      ]);
+
+      if (currentLoanInstallment && currentLoanInstallment.status !== 'SUDAH BAYAR') {
+        await db.run(`
+          UPDATE employee_loan_installments
+          SET status = 'SUDAH BAYAR',
+              paid_at = CURRENT_TIMESTAMP
+          WHERE id = ?
+        `, [currentLoanInstallment.id]);
+
+        const unpaidInstallments = await db.all(`
+          SELECT *
+          FROM employee_loan_installments
+          WHERE loan_id = ?
+          AND status != 'SUDAH BAYAR'
+        `, [currentLoanInstallment.loan_id]);
+
+        const newRemaining = unpaidInstallments.reduce((total, item) => {
+          return total + item.bill_amount;
+        }, 0);
+
+        await db.run(`
+          UPDATE employee_loans
+          SET remaining_amount = ?,
+              status = ?
+          WHERE id = ?
+        `, [
+          newRemaining,
+          newRemaining <= 0 ? 'Lunas' : 'Aktif',
+          currentLoanInstallment.loan_id
+        ]);
+      }
+
+      await db.run('COMMIT');
+
+      res.json({
+        success: true,
+        message: 'Gaji karyawan berhasil dibayar',
+        total_salary: totalSalary
+      });
+
+    } catch (error) {
+      await db.run('ROLLBACK');
+      throw error;
+    }
+
+  } catch (error) {
+    console.error('Error paying employee salary:', error);
+
+    res.status(500).json({
+      error: 'Gagal membayar gaji karyawan'
+    });
+  }
+});
+
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error('Server Error:', err.stack);
@@ -2728,6 +3067,262 @@ app.use((err, req, res, next) => {
     message: err.message,
     ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
   });
+});
+
+// EMPLOYEE LOANS API
+
+// GET EMPLOYEE LOAN DETAIL
+app.get('/api/employees/:id/loans', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const year = req.query.year || new Date().getFullYear();
+
+    const activeLoan = await db.get(`
+      SELECT *
+      FROM employee_loans
+      WHERE employee_id = ?
+      AND status = 'Aktif'
+      ORDER BY created_at DESC
+      LIMIT 1
+    `, [id]);
+
+    if (!activeLoan) {
+      return res.json({
+        activeLoan: null,
+        installments: [],
+        summary: {
+          total_amount: 0,
+          remaining_amount: 0,
+          monthly_installment: 0,
+          target_month: null,
+          target_year: null
+        }
+      });
+    }
+
+    const installments = await db.all(`
+      SELECT *
+      FROM employee_loan_installments
+      WHERE loan_id = ?
+      AND year = ?
+      ORDER BY year ASC, month ASC
+    `, [activeLoan.id, year]);
+
+    res.json({
+      activeLoan,
+      installments,
+      summary: {
+        total_amount: activeLoan.total_amount,
+        remaining_amount: activeLoan.remaining_amount,
+        monthly_installment: activeLoan.monthly_installment,
+        target_month: activeLoan.target_month,
+        target_year: activeLoan.target_year
+      }
+    });
+
+  } catch (error) {
+    console.error('Error fetching employee loan:', error);
+
+    res.status(500).json({
+      error: 'Gagal mengambil data pinjaman karyawan'
+    });
+  }
+});
+
+
+// CREATE EMPLOYEE LOAN
+app.post('/api/employees/:id/loans', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { total_amount, monthly_installment } = req.body;
+
+    if (!total_amount || !monthly_installment) {
+      return res.status(400).json({
+        error: 'Jumlah pinjaman dan cicilan per bulan wajib diisi'
+      });
+    }
+
+    if (Number(total_amount) <= 0 || Number(monthly_installment) <= 0) {
+      return res.status(400).json({
+        error: 'Jumlah pinjaman dan cicilan harus lebih dari 0'
+      });
+    }
+
+    const existingLoan = await db.get(`
+      SELECT *
+      FROM employee_loans
+      WHERE employee_id = ?
+      AND status = 'Aktif'
+    `, [id]);
+
+    if (existingLoan) {
+      return res.status(400).json({
+        error: 'Karyawan ini masih memiliki pinjaman aktif'
+      });
+    }
+
+    const now = new Date();
+
+    let startMonth = now.getMonth() + 1;
+    let startYear = now.getFullYear();
+
+    const totalAmount = Number(total_amount);
+    const monthlyInstallment = Number(monthly_installment);
+
+    let remaining = totalAmount;
+    let month = startMonth;
+    let year = startYear;
+    let targetMonth = startMonth;
+    let targetYear = startYear;
+
+    const loanResult = await db.run(`
+      INSERT INTO employee_loans (
+        employee_id,
+        total_amount,
+        monthly_installment,
+        remaining_amount,
+        start_month,
+        start_year,
+        target_month,
+        target_year,
+        status
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [
+      id,
+      totalAmount,
+      monthlyInstallment,
+      totalAmount,
+      startMonth,
+      startYear,
+      startMonth,
+      startYear,
+      'Aktif'
+    ]);
+
+    const loanId = loanResult.lastID;
+
+    while (remaining > 0) {
+      const billAmount = remaining >= monthlyInstallment
+        ? monthlyInstallment
+        : remaining;
+
+      remaining -= billAmount;
+
+      await db.run(`
+        INSERT INTO employee_loan_installments (
+          loan_id,
+          employee_id,
+          month,
+          year,
+          bill_amount,
+          remaining_after,
+          status
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `, [
+        loanId,
+        id,
+        month,
+        year,
+        billAmount,
+        remaining,
+        'BELUM BAYAR'
+      ]);
+
+      targetMonth = month;
+      targetYear = year;
+
+      month++;
+
+      if (month > 12) {
+        month = 1;
+        year++;
+      }
+    }
+
+    await db.run(`
+      UPDATE employee_loans
+      SET target_month = ?, target_year = ?
+      WHERE id = ?
+    `, [targetMonth, targetYear, loanId]);
+
+    res.json({
+      success: true,
+      message: 'Pinjaman berhasil ditambahkan',
+      loan_id: loanId
+    });
+
+  } catch (error) {
+    console.error('Error creating employee loan:', error);
+
+    res.status(500).json({
+      error: 'Gagal menambahkan pinjaman karyawan'
+    });
+  }
+});
+
+
+// UPDATE INSTALLMENT STATUS
+app.put('/api/employee-loan-installments/:id/status', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    const installment = await db.get(`
+      SELECT *
+      FROM employee_loan_installments
+      WHERE id = ?
+    `, [id]);
+
+    if (!installment) {
+      return res.status(404).json({
+        error: 'Data cicilan tidak ditemukan'
+      });
+    }
+
+    await db.run(`
+      UPDATE employee_loan_installments
+      SET status = ?,
+          paid_at = CASE WHEN ? = 'SUDAH BAYAR' THEN CURRENT_TIMESTAMP ELSE NULL END
+      WHERE id = ?
+    `, [status, status, id]);
+
+    const unpaidInstallments = await db.all(`
+      SELECT *
+      FROM employee_loan_installments
+      WHERE loan_id = ?
+      AND status != 'SUDAH BAYAR'
+      ORDER BY year ASC, month ASC
+    `, [installment.loan_id]);
+
+    const newRemaining = unpaidInstallments.reduce((total, item) => {
+      return total + item.bill_amount;
+    }, 0);
+
+    await db.run(`
+      UPDATE employee_loans
+      SET remaining_amount = ?,
+          status = ?
+      WHERE id = ?
+    `, [
+      newRemaining,
+      newRemaining <= 0 ? 'Lunas' : 'Aktif',
+      installment.loan_id
+    ]);
+
+    res.json({
+      success: true,
+      message: 'Status cicilan berhasil diperbarui'
+    });
+
+  } catch (error) {
+    console.error('Error updating installment status:', error);
+
+    res.status(500).json({
+      error: 'Gagal memperbarui status cicilan'
+    });
+  }
 });
 
 // Initialize database and start server
