@@ -27,6 +27,41 @@ const getMonthName = (monthValue) => {
 
 const Attendance = ({ navigateTo }) => {
   const [month, setMonth] = useState(getTodayMonth());
+  const currentDate = new Date();
+
+  const [selectedMonth, setSelectedMonth] = useState(currentDate.getMonth() + 1);
+  const [selectedYear, setSelectedYear] = useState(currentDate.getFullYear());
+  const [showMonthPicker, setShowMonthPicker] = useState(false);
+
+  const monthOptions = [
+    { value: 1, label: 'Jan' },
+    { value: 2, label: 'Feb' },
+    { value: 3, label: 'Mar' },
+    { value: 4, label: 'Apr' },
+    { value: 5, label: 'Mei' },
+    { value: 6, label: 'Jun' },
+    { value: 7, label: 'Jul' },
+    { value: 8, label: 'Agu' },
+    { value: 9, label: 'Sep' },
+    { value: 10, label: 'Okt' },
+    { value: 11, label: 'Nov' },
+    { value: 12, label: 'Des' }
+  ];
+
+  const fullMonthNames = {
+    1: 'Januari',
+    2: 'Februari',
+    3: 'Maret',
+    4: 'April',
+    5: 'Mei',
+    6: 'Juni',
+    7: 'Juli',
+    8: 'Agustus',
+    9: 'September',
+    10: 'Oktober',
+    11: 'November',
+    12: 'Desember'
+  };
   const [selectedDay, setSelectedDay] = useState(new Date().getDate());
   const [daysInMonth, setDaysInMonth] = useState(31);
   const [employees, setEmployees] = useState([]);
@@ -40,6 +75,11 @@ const Attendance = ({ navigateTo }) => {
   useEffect(() => {
     fetchAttendance();
   }, [month]);
+
+  useEffect(() => {
+    const newMonth = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}`;
+    setMonth(newMonth);
+  }, [selectedMonth, selectedYear]);
 
   const fetchAttendance = async () => {
     setLoading(true);
@@ -160,14 +200,115 @@ const Attendance = ({ navigateTo }) => {
         </div>
 
         <div className="d-flex align-items-end gap-2 flex-wrap">
-          <div>
-            <label className="form-label mb-1">Bulan</label>
-            <input
-              type="month"
-              className="form-control"
-              value={month}
-              onChange={(event) => setMonth(event.target.value)}
-            />
+          <div style={{ position: 'relative' }}>
+            <label className="form-label mb-1">
+              Bulan
+            </label>
+
+            <button
+              type="button"
+              className="form-control d-flex justify-content-between align-items-center"
+              style={{
+                minWidth: '190px',
+                background: '#fff',
+                textAlign: 'left'
+              }}
+              onClick={() => setShowMonthPicker(!showMonthPicker)}
+            >
+              <span>
+                {fullMonthNames[selectedMonth]} {selectedYear}
+              </span>
+
+              <i className="fas fa-chevron-down"></i>
+            </button>
+
+            {showMonthPicker && (
+              <div
+                style={{
+                  position: 'absolute',
+                  top: '72px',
+                  right: 0,
+                  width: '280px',
+                  background: '#fff',
+                  border: '1px solid #dee2e6',
+                  borderRadius: '10px',
+                  boxShadow: '0 8px 25px rgba(0,0,0,0.15)',
+                  padding: '16px',
+                  zIndex: 999
+                }}
+              >
+                <div className="d-flex justify-content-between align-items-center mb-3">
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-outline-secondary"
+                    onClick={() => setSelectedYear(selectedYear - 1)}
+                  >
+                    <i className="fas fa-chevron-left"></i>
+                  </button>
+
+                  <strong style={{ fontSize: '18px' }}>
+                    {selectedYear}
+                  </strong>
+
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-outline-secondary"
+                    onClick={() => setSelectedYear(selectedYear + 1)}
+                  >
+                    <i className="fas fa-chevron-right"></i>
+                  </button>
+                </div>
+
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(4, 1fr)',
+                    gap: '8px'
+                  }}
+                >
+                  {monthOptions.map((item) => (
+                    <button
+                      key={item.value}
+                      type="button"
+                      className={`btn btn-sm ${
+                        selectedMonth === item.value
+                          ? 'btn-primary'
+                          : 'btn-outline-primary'
+                      }`}
+                      onClick={() => {
+                        setSelectedMonth(item.value);
+                        setShowMonthPicker(false);
+                      }}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="d-flex justify-content-between mt-3">
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-light"
+                    onClick={() => {
+                      const today = new Date();
+                      setSelectedMonth(today.getMonth() + 1);
+                      setSelectedYear(today.getFullYear());
+                      setShowMonthPicker(false);
+                    }}
+                  >
+                    Bulan Ini
+                  </button>
+
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-secondary"
+                    onClick={() => setShowMonthPicker(false)}
+                  >
+                    Tutup
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           <div>

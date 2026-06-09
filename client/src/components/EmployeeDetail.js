@@ -27,6 +27,53 @@ const EmployeeDetail = ({ navigateTo, employeeId }) => {
   const [attendanceData, setAttendanceData] = useState(null);
   const [attendanceLoading, setAttendanceLoading] = useState(false);
   const [attendanceSavingCell, setAttendanceSavingCell] = useState(null);
+  const initialAttendanceDate = new Date();
+
+  const [selectedAttendanceMonth, setSelectedAttendanceMonth] = useState(
+    initialAttendanceDate.getMonth() + 1
+  );
+  const [selectedAttendanceYear, setSelectedAttendanceYear] = useState(
+    initialAttendanceDate.getFullYear()
+  );
+  const [showAttendanceMonthPicker, setShowAttendanceMonthPicker] = useState(false);
+
+  const attendanceMonthOptions = [
+    { value: 1, label: 'Jan' },
+    { value: 2, label: 'Feb' },
+    { value: 3, label: 'Mar' },
+    { value: 4, label: 'Apr' },
+    { value: 5, label: 'Mei' },
+    { value: 6, label: 'Jun' },
+    { value: 7, label: 'Jul' },
+    { value: 8, label: 'Agu' },
+    { value: 9, label: 'Sep' },
+    { value: 10, label: 'Okt' },
+    { value: 11, label: 'Nov' },
+    { value: 12, label: 'Des' }
+  ];
+
+  const fullAttendanceMonthNames = {
+    1: 'Januari',
+    2: 'Februari',
+    3: 'Maret',
+    4: 'April',
+    5: 'Mei',
+    6: 'Juni',
+    7: 'Juli',
+    8: 'Agustus',
+    9: 'September',
+    10: 'Oktober',
+    11: 'November',
+    12: 'Desember'
+  };
+
+  useEffect(() => {
+    const newAttendanceMonth = `${selectedAttendanceYear}-${String(
+      selectedAttendanceMonth
+    ).padStart(2, '0')}`;
+
+    setAttendanceMonth(newAttendanceMonth);
+  }, [selectedAttendanceMonth, selectedAttendanceYear]);
 
   useEffect(() => {
     if (!employeeId) {
@@ -987,17 +1034,115 @@ const EmployeeDetail = ({ navigateTo, employeeId }) => {
               </p>
             </div>
 
-            <div>
-              <label className="form-label mb-1">
-                Pilih Bulan
-              </label>
+            <div className="d-flex align-items-center gap-2">
+              <label className="form-label mb-0">Bulan:</label>
 
-              <input
-                type="month"
-                className="form-control"
-                value={attendanceMonth}
-                onChange={(e) => setAttendanceMonth(e.target.value)}
-              />
+              <div style={{ position: 'relative' }}>
+                <button
+                  type="button"
+                  className="form-control form-control-sm d-flex justify-content-between align-items-center"
+                  style={{
+                    width: '180px',
+                    background: '#fff',
+                    textAlign: 'left'
+                  }}
+                  onClick={() => setShowAttendanceMonthPicker(!showAttendanceMonthPicker)}
+                >
+                  <span>
+                    {fullAttendanceMonthNames[selectedAttendanceMonth]} {selectedAttendanceYear}
+                  </span>
+
+                  <i className="fas fa-chevron-down"></i>
+                </button>
+
+                {showAttendanceMonthPicker && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: '38px',
+                      right: 0,
+                      width: '280px',
+                      background: '#fff',
+                      border: '1px solid #dee2e6',
+                      borderRadius: '10px',
+                      boxShadow: '0 8px 25px rgba(0,0,0,0.15)',
+                      padding: '16px',
+                      zIndex: 999
+                    }}
+                  >
+                    <div className="d-flex justify-content-between align-items-center mb-3">
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-outline-secondary"
+                        onClick={() => setSelectedAttendanceYear(selectedAttendanceYear - 1)}
+                      >
+                        <i className="fas fa-chevron-left"></i>
+                      </button>
+
+                      <strong style={{ fontSize: '18px' }}>
+                        {selectedAttendanceYear}
+                      </strong>
+
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-outline-secondary"
+                        onClick={() => setSelectedAttendanceYear(selectedAttendanceYear + 1)}
+                      >
+                        <i className="fas fa-chevron-right"></i>
+                      </button>
+                    </div>
+
+                    <div
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(4, 1fr)',
+                        gap: '8px'
+                      }}
+                    >
+                      {attendanceMonthOptions.map((item) => (
+                        <button
+                          key={item.value}
+                          type="button"
+                          className={`btn btn-sm ${
+                            selectedAttendanceMonth === item.value
+                              ? 'btn-primary'
+                              : 'btn-outline-primary'
+                          }`}
+                          onClick={() => {
+                            setSelectedAttendanceMonth(item.value);
+                            setShowAttendanceMonthPicker(false);
+                          }}
+                        >
+                          {item.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className="d-flex justify-content-between mt-3">
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-light"
+                        onClick={() => {
+                          const today = new Date();
+                          setSelectedAttendanceMonth(today.getMonth() + 1);
+                          setSelectedAttendanceYear(today.getFullYear());
+                          setShowAttendanceMonthPicker(false);
+                        }}
+                      >
+                        Bulan Ini
+                      </button>
+
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-secondary"
+                        onClick={() => setShowAttendanceMonthPicker(false)}
+                      >
+                        Tutup
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
