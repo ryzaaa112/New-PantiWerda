@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { employeePayrollsAPI } from '../services/api';
+import * as XLSX from 'xlsx'; // Import library di bagian atas file Anda
 
 const EmployeePayroll = ({ navigateTo }) => {
   const currentDate = new Date();
@@ -104,6 +105,49 @@ const EmployeePayroll = ({ navigateTo }) => {
     }
   };
 
+
+const handleDownloadExcel = () => {
+  if (!payrollData || !payrollData.payrolls) return;
+
+  // 1. Siapkan data dengan format yang diinginkan
+  const wsData = payrollData.payrolls.map(item => ({
+    "Nama": item.employee_name,
+    "Jabatan": item.position || '-',
+    "Tipe Gaji": item.salary_type || '-',
+    "Gaji Pokok": item.base_salary,
+    "Bonus": item.additional_variable,
+    "BPJS": item.bpjs_deduction,
+    "Pinjaman": item.loan_deduction,
+    "Total Dibayar": item.total_salary,
+    "Status": item.status
+  }));
+
+  // 2. Buat Worksheet
+  const ws = XLSX.utils.json_to_sheet(wsData);
+
+  // 3. Atur Lebar Kolom agar tidak terpotong
+  const colWidths = [{ wch: 20 }, { wch: 15 }, { wch: 12 }, { wch: 15 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 15 }, { wch: 15 }];
+  ws['!cols'] = colWidths;
+
+  // 4. Beri Warna berdasarkan Status
+  const range = XLSX.utils.decode_range(ws['!ref']);
+  for (let R = range.s.r + 1; R <= range.e.r; ++R) {
+    const statusCellAddress = XLSX.utils.encode_cell({ c: 8, r: R }); // Kolom ke-9 (Status)
+    const cell = ws[statusCellAddress];
+    
+    if (cell && cell.v === 'Sudah Dibayar') {
+      cell.s = { fill: { fgColor: { rgb: "C6EFCE" } }, font: { color: { rgb: "006100" }, bold: true } };
+    } else if (cell && cell.v === 'Belum Dibayar') {
+      cell.s = { fill: { fgColor: { rgb: "FFC7CE" } }, font: { color: { rgb: "9C0006" }, bold: true } };
+    }
+  }
+
+  // 5. Buat Workbook dan download
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Rekap Gaji");
+  XLSX.writeFile(wb, `Rekap_Gaji_${payrollMonth}.xlsx`);
+};
+
   return (
     <div className="page-wrapper">
 
@@ -125,6 +169,16 @@ const EmployeePayroll = ({ navigateTo }) => {
             Rekap total gaji yang perlu dibayarkan kepada karyawan.
           </p>
         </div>
+        <div className="d-flex gap-2 align-items-end">
+    
+    {/* Tombol Download excel */}
+    <button 
+      className="btn btn-success" 
+      onClick={handleDownloadExcel}
+      disabled={!payrollData || payrollData.payrolls?.length === 0}
+    >
+      <i className="fas fa-file-excel me-1"></i> Download Excel
+    </button>
 
         <div style={{ position: 'relative' }}>
           <label className="form-label mb-1">
@@ -235,8 +289,10 @@ const EmployeePayroll = ({ navigateTo }) => {
               </div>
             </div>
           )}
-        </div>
-      </div>
+    </div>
+  </div>
+  {/* --- AKHIR PEMBUNGKUS --- */}
+</div>
 
       {isLoading ? (
         <div className="text-center py-5">

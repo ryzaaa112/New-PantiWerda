@@ -161,15 +161,53 @@ const Attendance = ({ navigateTo }) => {
 
   const downloadExcel = async () => {
     try {
+      // 1. Ambil data mentah dari API
       const blob = await attendanceAPI.exportExcel(month);
+      const csvText = await blob.text();
 
+      // 2. Pecah data berdasarkan baris (enter)
+      const rows = csvText.split(/\r?\n/);
+
+      // 3. Buat struktur tabel HTML agar Excel membacanya per-kolom
+      let htmlTable = `
+        <html xmlns:x="urn:schemas-microsoft-com:office:excel">
+        <head><meta charset="utf-8"></head>
+        <body>
+          <table border="1">
+      `;
+
+      rows.forEach(row => {
+        if (!row.trim()) return; // Skip kalau baris kosong
+        
+        htmlTable += '<tr>';
+        
+        // Hapus tanda kutip ganda (") lalu pecah berdasarkan koma (,)
+        const cleanRow = row.replace(/"/g, '');
+        const columns = cleanRow.split(',');
+        
+        columns.forEach(col => {
+          // Masukkan ke dalam cell (kolom) dengan format rata tengah
+          htmlTable += `<td style="text-align: center; vertical-align: middle;">${col}</td>`;
+        });
+        
+        htmlTable += '</tr>';
+      });
+
+      htmlTable += `
+          </table>
+        </body>
+        </html>
+      `;
+
+      // 4. Download sebagai file Excel beneran (.xls)
       const url = window.URL.createObjectURL(
-        new Blob([blob], { type: 'text/csv;charset=utf-8;' })
+        new Blob([htmlTable], { type: 'application/vnd.ms-excel;charset=utf-8;' })
       );
 
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', `absensi-karyawan-${month}.csv`);
+      // Perhatikan ekstensinya aku ganti jadi .xls
+      link.setAttribute('download', `absensi-karyawan-${month}.xls`);
       document.body.appendChild(link);
       link.click();
       link.remove();
