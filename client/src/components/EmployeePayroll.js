@@ -380,6 +380,7 @@ const handleDownloadExcel = () => {
                     <th>Bonus</th>
                     <th>BPJS</th>
                     <th>Pinjaman</th>
+                    <th>Potongan Absensi</th>
                     <th>Total Dibayar</th>
                     <th>Status</th>
                     <th>Aksi</th>
@@ -389,7 +390,7 @@ const handleDownloadExcel = () => {
                 <tbody>
                   {payrollData.payrolls.length === 0 ? (
                     <tr>
-                      <td colSpan="10" className="text-center text-muted py-4">
+                      <td colSpan="11" className="text-center text-muted py-4">
                         Belum ada data karyawan.
                       </td>
                     </tr>
@@ -416,6 +417,16 @@ const handleDownloadExcel = () => {
 
                         <td className="text-danger fw-semibold">
                           - {formatCurrency(item.loan_deduction)}
+                        </td>
+
+                        <td className="text-danger fw-semibold">
+                          - {formatCurrency(item.attendance_deduction)}
+
+                          {item.unpaid_days > 0 && (
+                            <small className="d-block text-muted">
+                              {item.unpaid_days} hari
+                            </small>
+                          )}
                         </td>
 
                         <td className="fw-bold text-primary">

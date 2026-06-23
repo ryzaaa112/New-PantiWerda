@@ -1,3 +1,11 @@
+  .bg-orange {
+  background-color: #fd7e14 !important;
+  }
+
+  .text-orange {
+    color: #fd7e14 !important;
+  }
+
   * {
     margin: 0;
     padding: 0;

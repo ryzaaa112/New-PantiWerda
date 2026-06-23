@@ -592,6 +592,7 @@ async function createTables() {
         additional_variable INTEGER NOT NULL DEFAULT 0,
         bpjs_deduction INTEGER NOT NULL DEFAULT 0,
         loan_deduction INTEGER NOT NULL DEFAULT 0,
+        attendance_deduction INTEGER NOT NULL DEFAULT 0,
         total_salary INTEGER NOT NULL DEFAULT 0,
         status TEXT DEFAULT 'Belum Dibayar' CHECK (status IN ('Belum Dibayar', 'Sudah Dibayar')),
         paid_at DATETIME,
@@ -601,6 +602,20 @@ async function createTables() {
         FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
       )
     `);
+
+    try {
+      await db.run(`
+        ALTER TABLE employee_payrolls
+        ADD COLUMN attendance_deduction INTEGER NOT NULL DEFAULT 0
+      `);
+      console.log('✅ Added attendance_deduction column to employee_payrolls');
+    } catch (alterError) {
+      if (alterError.message.includes('duplicate column name')) {
+        console.log('✅ attendance_deduction column already exists');
+      } else {
+        throw alterError;
+      }
+    }
 
     //EMPLOYEE LOANS TABLE
     await db.exec(`
@@ -658,7 +673,7 @@ async function createTables() {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         employee_id INTEGER NOT NULL,
         attendance_date TEXT NOT NULL,
-        status TEXT NOT NULL CHECK (status IN ('H', 'S', 'I', 'A', 'O', 'K')),
+        status TEXT NOT NULL CHECK (status IN ('H', 'S', 'I', 'T', 'A', 'O', 'K')),
         notes TEXT,
         recorded_by TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -1788,6 +1803,7 @@ const attendanceStatuses = {
   H: 'Hadir',
   S: 'Sakit',
   I: 'Izin',
+  T: 'Izin (Tidak digaji)',
   A: 'Alpa',
   O: 'Off',
   K: 'Kebijakan',
@@ -1866,7 +1882,7 @@ app.get('/api/employee-attendance', async (req, res) => {
           acc[item.status] = (acc[item.status] || 0) + 1;
           return acc;
         },
-        { H: 0, S: 0, I: 0, A: 0, O: 0, K: 0 }
+        { H: 0, S: 0, I: 0, T: 0, A: 0, O: 0, K: 0 }
       );
 
       return {
@@ -1923,7 +1939,7 @@ app.post('/api/employee-attendance', async (req, res) => {
 
     if (!attendanceStatuses[status]) {
       return res.status(400).json({
-        error: 'Status absensi tidak valid. Gunakan H, S, I, A, O, atau K',
+        error: 'Status absensi tidak valid. Gunakan H, S, I, T, A, O, atau K',
       });
     }
 
@@ -1975,7 +1991,7 @@ app.post('/api/employee-attendance/mark-all', async (req, res) => {
 
     if (!attendanceStatuses[status]) {
       return res.status(400).json({
-        error: 'Status absensi tidak valid. Gunakan H, S, I, A, O, atau K',
+        error: 'Status absensi tidak valid. Gunakan H, S, I, T, A, O, atau K',
       });
     }
 
@@ -2789,6 +2805,36 @@ const parseMoneyValue = (value) => {
   return numberValue;
 };
 
+const DAILY_ATTENDANCE_DEDUCTION = 50000;
+
+const isDailyEmployee = (salaryType) => {
+  return String(salaryType || '').toLowerCase() === 'harian';
+};
+
+const getAttendanceDeduction = async (employeeId, payrollMonth, salaryType) => {
+  if (!isDailyEmployee(salaryType)) {
+    return {
+      unpaid_days: 0,
+      attendance_deduction: 0
+    };
+  }
+
+  const result = await db.get(`
+    SELECT COUNT(*) as count
+    FROM employee_attendance
+    WHERE employee_id = ?
+    AND strftime('%Y-%m', attendance_date) = ?
+    AND status IN ('A', 'T')
+  `, [employeeId, payrollMonth]);
+
+  const unpaidDays = result?.count || 0;
+
+  return {
+    unpaid_days: unpaidDays,
+    attendance_deduction: unpaidDays * DAILY_ATTENDANCE_DEDUCTION
+  };
+};
+
 // GET PAYROLL SUMMARY BY MONTH
 app.get('/api/employee-payrolls', async (req, res) => {
   try {
@@ -2838,8 +2884,17 @@ app.get('/api/employee-payrolls', async (req, res) => {
           ? parseMoneyValue(currentLoanInstallment.bill_amount)
           : 0;
 
+      const attendanceInfo = await getAttendanceDeduction(
+        employee.id,
+        payrollMonth,
+        employee.salary_type
+      );
+
+      const attendanceDeduction = attendanceInfo.attendance_deduction;
+      const unpaidDays = attendanceInfo.unpaid_days;
+
       const totalSalary =
-        baseSalary + additionalVariable - bpjsDeduction - loanDeduction;
+        baseSalary + additionalVariable - bpjsDeduction - loanDeduction - attendanceDeduction;
 
       payrolls.push({
         employee_id: employee.id,
@@ -2851,6 +2906,8 @@ app.get('/api/employee-payrolls', async (req, res) => {
         additional_variable: savedPayroll ? savedPayroll.additional_variable : additionalVariable,
         bpjs_deduction: savedPayroll ? savedPayroll.bpjs_deduction : bpjsDeduction,
         loan_deduction: savedPayroll ? savedPayroll.loan_deduction : loanDeduction,
+        attendance_deduction: savedPayroll ? savedPayroll.attendance_deduction : attendanceDeduction,
+        unpaid_days: unpaidDays,
         total_salary: savedPayroll ? savedPayroll.total_salary : totalSalary,
 
         status: savedPayroll ? savedPayroll.status : 'Belum Dibayar',
@@ -2867,6 +2924,7 @@ app.get('/api/employee-payrolls', async (req, res) => {
         acc.total_additional_variable += item.additional_variable;
         acc.total_bpjs_deduction += item.bpjs_deduction;
         acc.total_loan_deduction += item.loan_deduction;
+        acc.total_attendance_deduction += item.attendance_deduction;
         acc.total_salary += item.total_salary;
 
         if (item.status === 'Sudah Dibayar') {
@@ -2882,6 +2940,7 @@ app.get('/api/employee-payrolls', async (req, res) => {
         total_additional_variable: 0,
         total_bpjs_deduction: 0,
         total_loan_deduction: 0,
+        total_attendance_deduction: 0,
         total_salary: 0,
         total_paid: 0,
         total_unpaid: 0
@@ -2968,8 +3027,16 @@ app.post('/api/employee-payrolls/pay', async (req, res) => {
         ? parseMoneyValue(currentLoanInstallment.bill_amount)
         : 0;
 
+    const attendanceInfo = await getAttendanceDeduction(
+      employee_id,
+      payroll_month,
+      employee.salary_type
+    );
+
+    const attendanceDeduction = attendanceInfo.attendance_deduction;
+
     const totalSalary =
-      baseSalary + additionalVariable - bpjsDeduction - loanDeduction;
+      baseSalary + additionalVariable - bpjsDeduction - loanDeduction - attendanceDeduction;
 
     await db.run('BEGIN TRANSACTION');
 
@@ -2982,11 +3049,12 @@ app.post('/api/employee-payrolls/pay', async (req, res) => {
           additional_variable,
           bpjs_deduction,
           loan_deduction,
+          attendance_deduction,
           total_salary,
           status,
           paid_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, 'Sudah Dibayar', CURRENT_TIMESTAMP)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Sudah Dibayar', CURRENT_TIMESTAMP)
         ON CONFLICT(employee_id, payroll_month) DO UPDATE SET
           base_salary = excluded.base_salary,
           additional_variable = excluded.additional_variable,
@@ -3003,6 +3071,7 @@ app.post('/api/employee-payrolls/pay', async (req, res) => {
         additionalVariable,
         bpjsDeduction,
         loanDeduction,
+        attendanceDeduction,
         totalSalary
       ]);
 

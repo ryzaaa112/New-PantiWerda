@@ -512,12 +512,13 @@ const EmployeeDetail = ({ navigateTo, employeeId }) => {
     { code: 'H', label: 'Hadir', className: 'bg-success text-white' },
     { code: 'S', label: 'Sakit', className: 'bg-info text-dark' },
     { code: 'I', label: 'Izin', className: 'bg-warning text-dark' },
+    { code: 'T', label: 'Izin (Tidak digaji)', className: 'bg-orange text-white' },
     { code: 'A', label: 'Alpa', className: 'bg-danger text-white' },
     { code: 'O', label: 'Off', className: 'bg-secondary text-white' },
     { code: 'K', label: 'Kebijakan', className: 'bg-primary text-white' },
   ];
 
-  const ATTENDANCE_STATUS_ORDER = ['', 'H', 'S', 'I', 'A', 'O', 'K'];
+  const ATTENDANCE_STATUS_ORDER = ['', 'H', 'S', 'I', 'T', 'A', 'O', 'K'];
 
   const pad2 = (num) => String(num).padStart(2, '0');
 
