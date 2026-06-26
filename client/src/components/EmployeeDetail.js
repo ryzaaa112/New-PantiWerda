@@ -389,7 +389,74 @@ const EmployeeDetail = ({ navigateTo, employeeId }) => {
     11: 'November',
     12: 'Desember'
   };
+  const handleDownloadAllYears = async () => {
+    if (!employeeId || !loanData) return;
 
+    try {
+      const startYear = new Date().getFullYear();
+      const endYear = 2030; 
+      let allInstallments = [];
+
+      // Ambil data per tahun
+      for (let year = startYear; year <= endYear; year++) {
+        const data = await employeeLoansAPI.getByEmployee(employeeId, year);
+        if (data && data.installments) {
+          allInstallments.push(...data.installments);
+        }
+      }
+
+      // Fungsi pembantu untuk membersihkan format "Rp" atau simbol mata uang lainnya
+      // Kita hanya mengambil angka murni
+      const cleanNumber = (val) => {
+        return val ? val.toString().replace(/[^0-9]/g, '') : '0';
+      };
+
+      // 1. Bagian Header (Ringkasan)
+      let htmlTable = `
+        <table border="1">
+          <tr><th colspan="5" style="background-color: #d9ecff; text-align: center;">LAPORAN PINJAMAN LENGKAP: ${employee.name.toUpperCase()}</th></tr>
+          <tr><td>Nama Karyawan</td><td colspan="4">${employee.name}</td></tr>
+          <tr><td>Total Pinjaman</td><td colspan="4">${loanData.summary.total_amount}</td></tr>
+          <tr><td>Sisa Pinjaman</td><td colspan="4">${loanData.summary.remaining_amount}</td></tr>
+          <tr><td>Cicilan Perbulan</td><td colspan="4">${loanData.summary.monthly_installment}</td></tr>
+          <tr><td>Target Lunas</td><td colspan="4">${monthNames[loanData.summary.target_month]} ${loanData.summary.target_year}</td></tr>
+          <tr><td colspan="5"></td></tr>
+          <tr style="background-color: #d9ecff;">
+            <th>Bulan</th><th>Tahun</th><th>Tagihan</th><th>Sisa Pinjaman</th><th>Status</th>
+          </tr>
+      `;
+
+      // 2. Bagian Isi (Cicilan)
+      allInstallments.forEach(item => {
+        htmlTable += `
+          <tr>
+            <td>${monthNames[item.month]}</td>
+            <td>${item.year}</td>
+            <td>${cleanNumber(item.bill_amount)}</td>
+            <td>${cleanNumber(item.remaining_after)}</td>
+            <td>${item.status}</td>
+          </tr>
+        `;
+      });
+
+      htmlTable += `</table>`;
+
+      // 3. Trigger Download
+      const blob = new Blob([htmlTable], { type: 'application/vnd.ms-excel' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `Laporan_Pinjaman_${employee.name.replace(/\s+/g, '_')}.xls`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (error) {
+      console.error("Gagal download:", error);
+      alert("Terjadi kesalahan saat memproses data.");
+    }
+  };
+
+  
   const fetchLoanData = async () => {
     try {
       setLoanLoading(true);
@@ -1389,7 +1456,7 @@ const EmployeeDetail = ({ navigateTo, employeeId }) => {
                     <button
                       type="button"
                       className="btn btn-success"
-                      onClick={() => alert('Fitur download Excel dibuat setelah tabel pinjaman selesai.')}
+                      onClick={handleDownloadAllYears}
                     >
                       <i className="fas fa-file-excel me-2"></i>
                       Download Excel
@@ -1655,5 +1722,6 @@ const EmployeeDetail = ({ navigateTo, employeeId }) => {
     </div>
   );
 };
+
 
 export default EmployeeDetail;
