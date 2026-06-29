@@ -109,7 +109,7 @@ const EmployeePayroll = ({ navigateTo }) => {
 const handleDownloadExcel = () => {
   if (!payrollData || !payrollData.payrolls) return;
 
-  // 1. Siapkan data dengan format yang diinginkan
+  // 1. Siapkan data dengan format yang diinginkan (ditambahkan kolom Potongan Absensi)
   const wsData = payrollData.payrolls.map(item => ({
     "Nama": item.employee_name,
     "Jabatan": item.position || '-',
@@ -118,6 +118,7 @@ const handleDownloadExcel = () => {
     "Bonus": item.additional_variable,
     "BPJS": item.bpjs_deduction,
     "Pinjaman": item.loan_deduction,
+    "Potongan Absensi": item.attendance_deduction, // <--- TAMBAHKAN BARIS INI
     "Total Dibayar": item.total_salary,
     "Status": item.status
   }));
@@ -125,14 +126,19 @@ const handleDownloadExcel = () => {
   // 2. Buat Worksheet
   const ws = XLSX.utils.json_to_sheet(wsData);
 
-  // 3. Atur Lebar Kolom agar tidak terpotong
-  const colWidths = [{ wch: 20 }, { wch: 15 }, { wch: 12 }, { wch: 15 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 15 }, { wch: 15 }];
+  // 3. Atur Lebar Kolom agar tidak terpotong (tambahkan satu item untuk kolom baru)
+  const colWidths = [
+    { wch: 20 }, { wch: 15 }, { wch: 12 }, { wch: 15 }, 
+    { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 18 }, // <--- Lebar untuk Potongan Absensi
+    { wch: 15 }, { wch: 15 }
+  ];
   ws['!cols'] = colWidths;
 
   // 4. Beri Warna berdasarkan Status
+  // Perhatikan index kolom berubah dari 8 menjadi 9 karena ada penambahan kolom baru
   const range = XLSX.utils.decode_range(ws['!ref']);
   for (let R = range.s.r + 1; R <= range.e.r; ++R) {
-    const statusCellAddress = XLSX.utils.encode_cell({ c: 8, r: R }); // Kolom ke-9 (Status)
+    const statusCellAddress = XLSX.utils.encode_cell({ c: 9, r: R }); // <--- Ubah menjadi c: 9
     const cell = ws[statusCellAddress];
     
     if (cell && cell.v === 'Sudah Dibayar') {
@@ -405,7 +411,15 @@ const handleDownloadExcel = () => {
 
                         <td>{item.salary_type || '-'}</td>
 
-                        <td>{formatCurrency(item.base_salary)}</td>
+                        <td>
+                          {formatCurrency(item.base_salary)}
+
+                          {item.salary_type === 'Harian' && (
+                            <small className="d-block text-muted">
+                              {item.paid_days || 0} hari digaji
+                            </small>
+                          )}
+                        </td>
 
                         <td className="text-success fw-semibold">
                           + {formatCurrency(item.additional_variable)}
