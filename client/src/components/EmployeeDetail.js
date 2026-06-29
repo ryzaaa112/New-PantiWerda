@@ -1409,6 +1409,7 @@ const EmployeeDetail = ({ navigateTo, employeeId }) => {
                 Belum ada riwayat pinjaman aktif.
               </p>
 
+              {employee?.salary_type === 'Bulanan' && (
               <button
                 type="button"
                 className="btn btn-primary"
@@ -1417,6 +1418,7 @@ const EmployeeDetail = ({ navigateTo, employeeId }) => {
                 <i className="fas fa-plus me-2"></i>
                 Tambah Pinjaman
               </button>
+              )}
             </div>
           ) : (
             <div>

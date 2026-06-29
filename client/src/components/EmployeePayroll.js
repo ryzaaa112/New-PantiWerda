@@ -405,7 +405,15 @@ const handleDownloadExcel = () => {
 
                         <td>{item.salary_type || '-'}</td>
 
-                        <td>{formatCurrency(item.base_salary)}</td>
+                        <td>
+                          {formatCurrency(item.base_salary)}
+
+                          {item.salary_type === 'Harian' && (
+                            <small className="d-block text-muted">
+                              {item.paid_days || 0} hari digaji
+                            </small>
+                          )}
+                        </td>
 
                         <td className="text-success fw-semibold">
                           + {formatCurrency(item.additional_variable)}

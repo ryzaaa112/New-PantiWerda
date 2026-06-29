@@ -2811,15 +2811,24 @@ const isDailyEmployee = (salaryType) => {
   return String(salaryType || '').toLowerCase() === 'harian';
 };
 
-const getAttendanceDeduction = async (employeeId, payrollMonth, salaryType) => {
+const getAttendancePayrollInfo = async (employeeId, payrollMonth, salaryType) => {
   if (!isDailyEmployee(salaryType)) {
     return {
+      paid_days: 0,
       unpaid_days: 0,
       attendance_deduction: 0
     };
   }
 
-  const result = await db.get(`
+  const paidResult = await db.get(`
+    SELECT COUNT(*) as count
+    FROM employee_attendance
+    WHERE employee_id = ?
+    AND strftime('%Y-%m', attendance_date) = ?
+    AND status IN ('H', 'S', 'I', 'O', 'K')
+  `, [employeeId, payrollMonth]);
+
+  const unpaidResult = await db.get(`
     SELECT COUNT(*) as count
     FROM employee_attendance
     WHERE employee_id = ?
@@ -2827,9 +2836,11 @@ const getAttendanceDeduction = async (employeeId, payrollMonth, salaryType) => {
     AND status IN ('A', 'T')
   `, [employeeId, payrollMonth]);
 
-  const unpaidDays = result?.count || 0;
+  const paidDays = paidResult?.count || 0;
+  const unpaidDays = unpaidResult?.count || 0;
 
   return {
+    paid_days: paidDays,
     unpaid_days: unpaidDays,
     attendance_deduction: unpaidDays * DAILY_ATTENDANCE_DEDUCTION
   };
@@ -2840,13 +2851,11 @@ app.get('/api/employee-payrolls', async (req, res) => {
   try {
     const payrollMonth = req.query.month || new Date().toISOString().slice(0, 7);
 
-    if (!/^\d{4}-\d{2}$/.test(payrollMonth)) {
+    if (!isValidMonth(payrollMonth)) {
       return res.status(400).json({
-        error: 'Format bulan harus YYYY-MM, contoh: 2026-06'
+        error: 'Format bulan harus YYYY-MM, contoh: 2026-01'
       });
     }
-
-    const [year, month] = payrollMonth.split('-').map(Number);
 
     const employees = await db.all(`
       SELECT *
@@ -2855,6 +2864,8 @@ app.get('/api/employee-payrolls', async (req, res) => {
     `);
 
     const payrolls = [];
+
+    const [year, month] = payrollMonth.split('-').map(Number);
 
     for (const employee of employees) {
       const savedPayroll = await db.get(`
@@ -2875,23 +2886,28 @@ app.get('/api/employee-payrolls', async (req, res) => {
         LIMIT 1
       `, [employee.id, month, year]);
 
-      const baseSalary = parseMoneyValue(employee.salary);
+      const salaryRate = parseMoneyValue(employee.salary);
       const additionalVariable = parseMoneyValue(employee.additional_variable);
       const bpjsDeduction = parseMoneyValue(employee.bpjs);
 
-      const loanDeduction =
-        currentLoanInstallment && currentLoanInstallment.status !== 'SUDAH BAYAR'
-          ? parseMoneyValue(currentLoanInstallment.bill_amount)
-          : 0;
-
-      const attendanceInfo = await getAttendanceDeduction(
+      const attendanceInfo = await getAttendancePayrollInfo(
         employee.id,
         payrollMonth,
         employee.salary_type
       );
 
-      const attendanceDeduction = attendanceInfo.attendance_deduction;
+      const paidDays = attendanceInfo.paid_days;
       const unpaidDays = attendanceInfo.unpaid_days;
+      const attendanceDeduction = attendanceInfo.attendance_deduction;
+
+      const baseSalary = isDailyEmployee(employee.salary_type)
+        ? salaryRate * paidDays
+        : salaryRate;
+
+      const loanDeduction =
+        currentLoanInstallment && currentLoanInstallment.status !== 'SUDAH BAYAR'
+          ? parseMoneyValue(currentLoanInstallment.bill_amount)
+          : 0;
 
       const totalSalary =
         baseSalary + additionalVariable - bpjsDeduction - loanDeduction - attendanceDeduction;
@@ -2901,20 +2917,16 @@ app.get('/api/employee-payrolls', async (req, res) => {
         employee_name: employee.name,
         position: employee.position,
         salary_type: employee.salary_type,
-
         base_salary: savedPayroll ? savedPayroll.base_salary : baseSalary,
         additional_variable: savedPayroll ? savedPayroll.additional_variable : additionalVariable,
         bpjs_deduction: savedPayroll ? savedPayroll.bpjs_deduction : bpjsDeduction,
         loan_deduction: savedPayroll ? savedPayroll.loan_deduction : loanDeduction,
         attendance_deduction: savedPayroll ? savedPayroll.attendance_deduction : attendanceDeduction,
+        paid_days: paidDays,
         unpaid_days: unpaidDays,
         total_salary: savedPayroll ? savedPayroll.total_salary : totalSalary,
-
         status: savedPayroll ? savedPayroll.status : 'Belum Dibayar',
-        paid_at: savedPayroll ? savedPayroll.paid_at : null,
-
-        loan_installment_id: currentLoanInstallment ? currentLoanInstallment.id : null,
-        loan_installment_status: currentLoanInstallment ? currentLoanInstallment.status : null
+        paid_at: savedPayroll ? savedPayroll.paid_at : null
       });
     }
 
@@ -2948,20 +2960,17 @@ app.get('/api/employee-payrolls', async (req, res) => {
     );
 
     res.json({
-      payroll_month: payrollMonth,
-      payrolls,
-      summary
+      month: payrollMonth,
+      summary,
+      payrolls
     });
-
   } catch (error) {
     console.error('Error fetching employee payrolls:', error);
-
     res.status(500).json({
-      error: 'Gagal mengambil data rekap gaji karyawan'
+      error: 'Gagal memuat rekap gaji karyawan'
     });
   }
 });
-
 
 // PAY ONE EMPLOYEE SALARY
 app.post('/api/employee-payrolls/pay', async (req, res) => {
@@ -2974,9 +2983,9 @@ app.post('/api/employee-payrolls/pay', async (req, res) => {
       });
     }
 
-    if (!/^\d{4}-\d{2}$/.test(payroll_month)) {
+    if (!isValidMonth(payroll_month)) {
       return res.status(400).json({
-        error: 'Format bulan harus YYYY-MM'
+        error: 'Format bulan harus YYYY-MM, contoh: 2026-01'
       });
     }
 
@@ -2989,19 +2998,6 @@ app.post('/api/employee-payrolls/pay', async (req, res) => {
     if (!employee) {
       return res.status(404).json({
         error: 'Karyawan tidak ditemukan'
-      });
-    }
-
-    const existingPayroll = await db.get(`
-      SELECT *
-      FROM employee_payrolls
-      WHERE employee_id = ?
-      AND payroll_month = ?
-    `, [employee_id, payroll_month]);
-
-    if (existingPayroll && existingPayroll.status === 'Sudah Dibayar') {
-      return res.status(400).json({
-        error: 'Gaji karyawan bulan ini sudah dibayar'
       });
     }
 
@@ -3018,22 +3014,26 @@ app.post('/api/employee-payrolls/pay', async (req, res) => {
       LIMIT 1
     `, [employee_id, month, year]);
 
-    const baseSalary = parseMoneyValue(employee.salary);
+    const salaryRate = parseMoneyValue(employee.salary);
     const additionalVariable = parseMoneyValue(employee.additional_variable);
     const bpjsDeduction = parseMoneyValue(employee.bpjs);
 
-    const loanDeduction =
-      currentLoanInstallment && currentLoanInstallment.status !== 'SUDAH BAYAR'
-        ? parseMoneyValue(currentLoanInstallment.bill_amount)
-        : 0;
-
-    const attendanceInfo = await getAttendanceDeduction(
+    const attendanceInfo = await getAttendancePayrollInfo(
       employee_id,
       payroll_month,
       employee.salary_type
     );
 
     const attendanceDeduction = attendanceInfo.attendance_deduction;
+
+    const baseSalary = isDailyEmployee(employee.salary_type)
+      ? salaryRate * attendanceInfo.paid_days
+      : salaryRate;
+
+    const loanDeduction =
+      currentLoanInstallment && currentLoanInstallment.status !== 'SUDAH BAYAR'
+        ? parseMoneyValue(currentLoanInstallment.bill_amount)
+        : 0;
 
     const totalSalary =
       baseSalary + additionalVariable - bpjsDeduction - loanDeduction - attendanceDeduction;
@@ -3060,6 +3060,7 @@ app.post('/api/employee-payrolls/pay', async (req, res) => {
           additional_variable = excluded.additional_variable,
           bpjs_deduction = excluded.bpjs_deduction,
           loan_deduction = excluded.loan_deduction,
+          attendance_deduction = excluded.attendance_deduction,
           total_salary = excluded.total_salary,
           status = 'Sudah Dibayar',
           paid_at = CURRENT_TIMESTAMP,
@@ -3083,27 +3084,29 @@ app.post('/api/employee-payrolls/pay', async (req, res) => {
           WHERE id = ?
         `, [currentLoanInstallment.id]);
 
-        const unpaidInstallments = await db.all(`
+        const loan = await db.get(`
           SELECT *
-          FROM employee_loan_installments
-          WHERE loan_id = ?
-          AND status != 'SUDAH BAYAR'
+          FROM employee_loans
+          WHERE id = ?
         `, [currentLoanInstallment.loan_id]);
 
-        const newRemaining = unpaidInstallments.reduce((total, item) => {
-          return total + item.bill_amount;
-        }, 0);
+        if (loan) {
+          const newRemainingAmount = Math.max(
+            0,
+            parseMoneyValue(loan.remaining_amount) - parseMoneyValue(currentLoanInstallment.bill_amount)
+          );
 
-        await db.run(`
-          UPDATE employee_loans
-          SET remaining_amount = ?,
-              status = ?
-          WHERE id = ?
-        `, [
-          newRemaining,
-          newRemaining <= 0 ? 'Lunas' : 'Aktif',
-          currentLoanInstallment.loan_id
-        ]);
+          await db.run(`
+            UPDATE employee_loans
+            SET remaining_amount = ?,
+                status = ?
+            WHERE id = ?
+          `, [
+            newRemainingAmount,
+            newRemainingAmount <= 0 ? 'Lunas' : 'Aktif',
+            loan.id
+          ]);
+        }
       }
 
       await db.run('COMMIT');
@@ -3111,17 +3114,26 @@ app.post('/api/employee-payrolls/pay', async (req, res) => {
       res.json({
         success: true,
         message: 'Gaji karyawan berhasil dibayar',
-        total_salary: totalSalary
+        data: {
+          employee_id,
+          payroll_month,
+          base_salary: baseSalary,
+          additional_variable: additionalVariable,
+          bpjs_deduction: bpjsDeduction,
+          loan_deduction: loanDeduction,
+          attendance_deduction: attendanceDeduction,
+          paid_days: attendanceInfo.paid_days,
+          unpaid_days: attendanceInfo.unpaid_days,
+          total_salary: totalSalary,
+          status: 'Sudah Dibayar'
+        }
       });
-
     } catch (error) {
       await db.run('ROLLBACK');
       throw error;
     }
-
   } catch (error) {
-    console.error('Error paying employee salary:', error);
-
+    console.error('Error paying employee payroll:', error);
     res.status(500).json({
       error: 'Gagal membayar gaji karyawan'
     });
@@ -3214,6 +3226,24 @@ app.post('/api/employees/:id/loans', async (req, res) => {
     if (Number(total_amount) <= 0 || Number(monthly_installment) <= 0) {
       return res.status(400).json({
         error: 'Jumlah pinjaman dan cicilan harus lebih dari 0'
+      });
+    }
+
+    const employee = await db.get(`
+      SELECT id, name, salary_type
+      FROM employees
+      WHERE id = ?
+    `, [id]);
+
+    if (!employee) {
+      return res.status(404).json({
+        error: 'Karyawan tidak ditemukan'
+      });
+    }
+
+    if (isDailyEmployee(employee.salary_type)) {
+      return res.status(400).json({
+        error: 'Pinjaman hanya tersedia untuk karyawan bulanan'
       });
     }
 
