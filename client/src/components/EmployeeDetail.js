@@ -2,6 +2,9 @@
 import React, { useEffect, useState } from 'react';
 import { employeesAPI, employeeLoansAPI, attendanceAPI } from '../services/api';
 
+
+
+
 const EmployeeDetail = ({ navigateTo, employeeId }) => {
   const [employee, setEmployee] = useState(null);
   const [editData, setEditData] = useState({});
@@ -106,6 +109,8 @@ const EmployeeDetail = ({ navigateTo, employeeId }) => {
 
       setEmployee(employeeData);
 
+      const savedStatus = localStorage.getItem(`employee_status_${employeeId}`);
+
       setEditData({
         religion: employeeData.religion || '',
         phone: employeeData.phone || '',
@@ -114,7 +119,8 @@ const EmployeeDetail = ({ navigateTo, employeeId }) => {
         salary: employeeData.salary || '',
         salary_type: employeeData.salary_type || 'Bulanan',
         additional_variable: employeeData.additional_variable || '',
-        bpjs: employeeData.bpjs || ''
+        bpjs: employeeData.bpjs || '',
+        status: savedStatus || 'Aktif'
       });
 
     } catch (error) {
@@ -222,6 +228,24 @@ const EmployeeDetail = ({ navigateTo, employeeId }) => {
 
     return isValid;
   };
+
+  const handleToggleStatus = () => {
+    const newStatus =
+      editData.status === "Aktif"
+        ? "Non Aktif"
+        : "Aktif";
+
+    setEditData(prev => ({
+      ...prev,
+      status: newStatus
+    }));
+
+    localStorage.setItem(
+      `employee_status_${employeeId}`,
+      newStatus
+    );
+  };
+
 
   // ================= EDIT HANDLER =================
 
@@ -774,18 +798,22 @@ const EmployeeDetail = ({ navigateTo, employeeId }) => {
           {formatGender(employee.gender)} • {calculateAge(employee.birth_date)}
         </p>
 
-        <span
-          style={{
-            background: '#5cb85c',
-            color: '#fff',
-            padding: '4px 10px',
-            borderRadius: '6px',
-            fontSize: '12px',
-            fontWeight: '600'
-          }}
-        >
-          Aktif
-        </span>
+        <button
+  onClick={handleToggleStatus}
+  style={{
+    background:
+      editData.status === "Aktif"
+        ? "#5cb85c"
+        : "#dc3545",
+    color: "#fff",
+    padding: "4px 10px",
+    borderRadius: "6px",
+    border: "none",
+    cursor: "pointer"
+  }}
+>
+  {editData.status}
+</button>
       </div>
 
       {/* TABS */}

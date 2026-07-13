@@ -99,6 +99,9 @@ const EmployeeList = ({ navigateTo, showDetail }) => {
             const genderIcon = gender === 'male' ? 'fa-male' : 'fa-female';
             const type = gender === 'male' ? 'Laki-laki' : 'Perempuan';
 
+            const employeeStatus =
+      localStorage.getItem(`employee_status_${employee.id}`) || "Aktif";
+
             return (
               <div
                 key={employee.id}
@@ -142,8 +145,14 @@ const EmployeeList = ({ navigateTo, showDetail }) => {
                   </div>
 
                   <div className="mt-3 d-flex justify-content-between align-items-center">
-                    <span className="badge bg-success badge-custom">
-                      Aktif
+                    <span
+                      className={`badge ${
+                        employeeStatus === "Aktif"
+                          ? "bg-success"
+                          : "bg-danger"
+                      } badge-custom`}
+                    >
+                      {employeeStatus}
                     </span>
 
                     <button
