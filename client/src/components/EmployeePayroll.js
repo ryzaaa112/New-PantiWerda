@@ -8,7 +8,8 @@ const EmployeePayroll = ({ navigateTo }) => {
   const [selectedMonth, setSelectedMonth] = useState(currentDate.getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState(currentDate.getFullYear());
   const [showMonthPicker, setShowMonthPicker] = useState(false);
-
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [selectedPayroll, setSelectedPayroll] = useState(null);
   const payrollMonth = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}`;
 
   const monthOptions = [
@@ -473,7 +474,10 @@ const handleDownloadExcel = () => {
                               type="button"
                               className="btn btn-sm btn-primary"
                               disabled={payingEmployeeId === item.employee_id}
-                              onClick={() => handlePayEmployee(item.employee_id)}
+                              onClick={() => {
+                                setSelectedPayroll(item);
+                                setShowPaymentModal(true);
+                              }}
                             >
                               {payingEmployeeId === item.employee_id ? (
                                 'Membayar...'
@@ -496,6 +500,66 @@ const handleDownloadExcel = () => {
         </>
       )}
 
+      {showPaymentModal && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            width: "100%",
+            height: "100%",
+            background: "rgba(0,0,0,0.5)",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            zIndex: 9999
+          }}
+        >
+          <div
+            style={{
+              background: "#fff",
+              borderRadius: "10px",
+              width: "420px",
+              padding: "25px",
+              boxShadow: "0 10px 30px rgba(0,0,0,0.3)"
+            }}
+          >
+            <h4 className="mb-3">
+              <i className="fas fa-exclamation-triangle text-warning me-2"></i>
+              Konfirmasi Pembayaran
+            </h4>
+
+            <p>
+              Pembayaran gaji hanya dapat dilakukan <strong>satu kali</strong>.
+            </p>
+
+            <p>
+              Setelah pembayaran berhasil, tombol <strong>Bayar</strong> tidak dapat
+              digunakan kembali.
+            </p>
+
+            <div className="d-flex justify-content-end gap-2 mt-4">
+              <button
+                className="btn btn-secondary"
+                onClick={() => setShowPaymentModal(false)}
+              >
+                Batal
+              </button>
+
+              <button
+                className="btn btn-primary"
+                onClick={() => {
+                  setShowPaymentModal(false);
+                  handlePayEmployee(selectedPayroll.employee_id);
+                }}
+              >
+                Ya, Bayar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
     </div>
   );
 };
