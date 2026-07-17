@@ -1370,7 +1370,7 @@ const EmployeeDetail = ({ navigateTo, employeeId }) => {
                           (_, index) => index + 1
                         ).map((day) => {
                           const currentStatus =
-                            attendanceData.employee.attendance?.[day]?.status || '';
+                            attendanceData.employee.attendance?.[day]?.status || 'Hx';
 
                           const statusData = getAttendanceStatusData(currentStatus);
 

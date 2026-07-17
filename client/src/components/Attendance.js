@@ -68,10 +68,17 @@ const Attendance = ({ navigateTo }) => {
   const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
   const [savingCell, setSavingCell] = useState(null);
-
+  const [page, setPage] = useState(1);
   const days = useMemo(() => {
-    return Array.from({ length: daysInMonth }, (_, index) => index + 1);
-  }, [daysInMonth]);
+  const allDays = Array.from(
+    { length: daysInMonth },
+    (_, index) => index + 1
+  );
+
+  return page === 1
+    ? allDays.slice(0, 15)
+    : allDays.slice(15);
+}, [daysInMonth, page]);
 
   useEffect(() => {
     fetchAttendance();
@@ -233,12 +240,12 @@ const Attendance = ({ navigateTo }) => {
       <div className="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
         <div>
           <h2 className="page-title mb-2">
-            <i className="fas fa-calendar-check"></i> Absensi Karyawan Bulanan
+            <i className="fas fa-calendar-check"></i> Absensi Karyawan
           </h2>
-          <p className="text-muted mb-0">Monitoring kehadiran karyawan per bulan</p>
+          <p className="text-muted mb-0">Monitoring kehadiran karyawan</p>
         </div>
-
-        <div className="d-flex align-items-end gap-2 flex-wrap">
+      
+        <div className="d-flex align-items-end gap-3 flex-wrap">
           <div style={{ position: 'relative' }}>
             <label className="form-label mb-1">
               Bulan
@@ -349,25 +356,29 @@ const Attendance = ({ navigateTo }) => {
               </div>
             )}
           </div>
-
-          <div>
-            <label className="form-label mb-1">Tanggal</label>
-            <select
-              className="form-select"
-              value={selectedDay}
-              onChange={(event) => setSelectedDay(Number(event.target.value))}
+          <div className="d-flex gap-2">
+            <button
+              className={`btn ${
+                page === 1 
+                ? "btn-primary" 
+                : "btn-outline-primary"
+              }`}
+              onClick={() => setPage(1)}
             >
-              {days.map((day) => (
-                <option key={day} value={day}>
-                  {day}
-                </option>
-              ))}
-            </select>
-          </div>
+              1 - 15
+            </button>
 
-          <button className="btn btn-success" onClick={markAllPresent} disabled={loading}>
-            <i className="fas fa-check-double me-1"></i> Semua Hadir
-          </button>
+            <button
+              className={`btn ${
+                page === 2 
+                ? "btn-primary" 
+                : "btn-outline-primary"
+              }`}
+              onClick={() => setPage(2)}
+            >
+              16 - {daysInMonth}
+            </button>
+          </div>
 
           <button className="btn btn-dark" onClick={downloadExcel} disabled={loading}>
             <i className="fas fa-file-excel me-1"></i> Download Excel
@@ -419,9 +430,13 @@ const Attendance = ({ navigateTo }) => {
             <table className="table table-bordered table-sm align-middle mb-0">
               <thead className="table-light sticky-top">
                 <tr>
-                  <th style={{ minWidth: 180 }} className="text-center">
-                    Nama
-                  </th>
+                 <th style={{ minWidth: 180 }} className="text-center">
+                      Nama
+                    </th>
+
+                    <th style={{ minWidth: 110 }} className="text-center">
+                      Tipe Gaji
+                    </th>
 
                   {days.map((day) => (
                     <th key={day} className="text-center" style={{ minWidth: 42 }}>
@@ -443,9 +458,12 @@ const Attendance = ({ navigateTo }) => {
                 {employees.map((employee) => (
                   <tr key={employee.id}>
                     <td className="fw-semibold">{employee.name}</td>
+                    <td className="text-center">
+                        {employee.salary_type || "-"}
+                      </td>
 
                     {days.map((day) => {
-                      const currentStatus = employee.attendance?.[day]?.status || '';
+                      const currentStatus = employee.attendance?.[day]?.status || 'H';
                       const statusData = getStatusData(currentStatus);
                       const cellKey = `${employee.id}-${day}`;
 
@@ -487,7 +505,9 @@ const Attendance = ({ navigateTo }) => {
         </div>
       )}
     </div>
+    
   );
 };
+
 
 export default Attendance;
