@@ -109,97 +109,90 @@ const InputEmployee = ({ navigateTo }) => {
   // ================= HANDLE CHANGE =================
 
   const handleChange = (e) => {
-
     const { name, value } = e.target;
 
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
+    // Perbarui state formData
+    setFormData(prev => {
+      const newData = { ...prev, [name]: value };
 
+      // LOGIKA TAMBAHAN:
+      // Jika tipe gaji diubah menjadi 'Harian', otomatis set BPJS ke '-'
+      if (name === 'salary_type' && value === 'Harian') {
+        newData.bpjs = '-';
+      }
+      
+      return newData;
+    });
+
+    // Validasi input
     let error = '';
 
     if (name === 'religion') {
       error = validateReligion(value);
-    }
-
-    else if (name === 'phone') {
+    } else if (name === 'phone') {
       error = validatePhone(value);
-    }
-
-    else if (name === 'salary') {
+    } else if (name === 'salary') {
       error = validateSalary(value);
-    }
-
-    else if (name === 'bpjs') {
+    } else if (name === 'bpjs') {
       error = validateBPJS(value);
-    }
-
-    else if (name === 'additional_variable') {
+    } else if (name === 'additional_variable') {
       error = validateAdditional_variable(value);
     }
 
+    // Perbarui state error
     setEmployeeErrors(prev => ({
       ...prev,
       [name]: error
     }));
-
   };
 
   // ================= HANDLE SUBMIT =================
 
   const handleSubmit = async (e) => {
+  e.preventDefault();
 
-    e.preventDefault();
+  // Buat copy formData untuk validasi
+  let dataToSubmit = { ...formData };
+  
+  // Jika Harian, paksa BPJS menjadi "-" agar validasi lolos dan data bersih
+  if (dataToSubmit.salary_type === 'Harian') {
+    dataToSubmit.bpjs = '-';
+  }
 
-    const religionError = validateReligion(formData.religion);
-    const phoneError = validatePhone(formData.phone);
-    const salaryError = validateSalary(formData.salary);
-    const bpjsError = validateBPJS(formData.bpjs);
-    const additional_variableError = validateAdditional_variable(formData.additional_variable);
-    const errors = {
-      religion: religionError,
-      phone: phoneError,
-      salary: salaryError,
-      bpjs: bpjsError,
-      additional_variable: additional_variableError
-    };
+  const religionError = validateReligion(dataToSubmit.religion);
+  const phoneError = validatePhone(dataToSubmit.phone);
+  const salaryError = validateSalary(dataToSubmit.salary);
+  // Hanya validasi BPJS jika bukan Harian
+  const bpjsError = dataToSubmit.salary_type === 'Bulanan' ? validateBPJS(dataToSubmit.bpjs) : '';
+  const additional_variableError = validateAdditional_variable(dataToSubmit.additional_variable);
 
-    setEmployeeErrors(errors);
-
-    if (
-      religionError ||
-      phoneError ||
-      salaryError ||
-      bpjsError ||
-      additional_variableError
-    ) {
-      alert('❌ Mohon perbaiki data yang masih salah');
-      return;
-    }
-
-    try {
-
-      setIsLoading(true);
-
-      await employeesAPI.create(formData);
-
-      alert('✅ Data karyawan berhasil ditambahkan');
-
-      navigateTo('el');
-
-    } catch (error) {
-
-      console.error('Error creating employee:', error);
-
-      alert('❌ Gagal menambahkan data karyawan');
-
-    } finally {
-
-      setIsLoading(false);
-
-    }
+  const errors = {
+    religion: religionError,
+    phone: phoneError,
+    salary: salaryError,
+    bpjs: bpjsError,
+    additional_variable: additional_variableError
   };
+
+  setEmployeeErrors(errors);
+
+  if (Object.values(errors).some(err => err !== '')) {
+    alert('❌ Mohon perbaiki data yang masih salah');
+    return;
+  }
+
+  try {
+    setIsLoading(true);
+    await employeesAPI.create(dataToSubmit); // Kirim data yang sudah dibersihkan
+    alert('✅ Data karyawan berhasil ditambahkan');
+    navigateTo('el');
+  } catch (error) {
+    console.error('Error creating employee:', error);
+    alert('❌ Gagal menambahkan data karyawan');
+  } finally {
+    setIsLoading(false);
+  }
+};
 
   return (
 
@@ -452,29 +445,23 @@ const InputEmployee = ({ navigateTo }) => {
             </div>
 
             {/* BPJS */}
-            <div className="col-md-6">
-
-              <label className="form-label">
-                BPJS *
-              </label>
-
-              <input
-                type="text"
-                className={`form-control ${employeeErrors.bpjs ? 'is-invalid' : ''}`}
-                name="bpjs"
-                value={formData.bpjs}
-                onChange={handleChange}
-                placeholder="Isi nominal, contoh: 500000. Jika tidak ada, isi -"
-                disabled={isLoading}
-              />
-
-              {employeeErrors.bpjs && (
-                <div className="invalid-feedback">
-                  {employeeErrors.bpjs}
-                </div>
-              )}
-
-            </div>
+            {formData.salary_type === 'Bulanan' && (
+      <div className="col-md-6">
+        <label className="form-label">BPJS *</label>
+        <input
+          type="text"
+          className={`form-control ${employeeErrors.bpjs ? 'is-invalid' : ''}`}
+          name="bpjs"
+          value={formData.bpjs}
+          onChange={handleChange}
+          placeholder="Isi nominal, contoh: 500000. Jika tidak ada, isi -"
+          disabled={isLoading}
+        />
+        {employeeErrors.bpjs && (
+          <div className="invalid-feedback">{employeeErrors.bpjs}</div>
+        )}
+      </div>
+    )}
 
             {/* VARIABEL TAMBAHAN */}
             <div className="col-md-6">

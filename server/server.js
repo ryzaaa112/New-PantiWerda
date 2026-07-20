@@ -2812,22 +2812,16 @@ const isDailyEmployee = (salaryType) => {
 };
 
 const getAttendancePayrollInfo = async (employeeId, payrollMonth, salaryType) => {
+  // Hanya proses jika karyawan harian
   if (!isDailyEmployee(salaryType)) {
-    return {
-      paid_days: 0,
-      unpaid_days: 0,
-      attendance_deduction: 0
-    };
+    return { paid_days: 0, unpaid_days: 0, attendance_deduction: 0 };
   }
 
-  const paidResult = await db.get(`
-    SELECT COUNT(*) as count
-    FROM employee_attendance
-    WHERE employee_id = ?
-    AND strftime('%Y-%m', attendance_date) = ?
-    AND status IN ('H', 'S', 'I', 'O', 'K')
-  `, [employeeId, payrollMonth]);
+  // 1. Ambil jumlah hari total di bulan tersebut
+  const [year, month] = payrollMonth.split('-').map(Number);
+  const daysInMonth = new Date(year, month, 0).getDate();
 
+  // 2. Hitung hari TIDAK MASUK (Alpa atau Tidak Dibayar) saja
   const unpaidResult = await db.get(`
     SELECT COUNT(*) as count
     FROM employee_attendance
@@ -2836,8 +2830,10 @@ const getAttendancePayrollInfo = async (employeeId, payrollMonth, salaryType) =>
     AND status IN ('A', 'T')
   `, [employeeId, payrollMonth]);
 
-  const paidDays = paidResult?.count || 0;
   const unpaidDays = unpaidResult?.count || 0;
+  
+  // 3. Hari dibayar adalah total hari di bulan itu dikurangi hari yang bolos
+  const paidDays = daysInMonth - unpaidDays;
 
   return {
     paid_days: paidDays,

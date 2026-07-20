@@ -26,6 +26,8 @@ const EmployeeDetail = ({ navigateTo, employeeId }) => {
   const [attendanceMonth, setAttendanceMonth] = useState(
     new Date().toISOString().slice(0, 7)
   );
+  const [showStatusModal, setShowStatusModal] = useState(false);
+  const [pendingStatus, setPendingStatus] = useState('');
 
   const [attendanceData, setAttendanceData] = useState(null);
   const [attendanceLoading, setAttendanceLoading] = useState(false);
@@ -230,23 +232,24 @@ const EmployeeDetail = ({ navigateTo, employeeId }) => {
   };
 
   const handleToggleStatus = () => {
-    const newStatus =
-      editData.status === "Aktif"
-        ? "Non Aktif"
-        : "Aktif";
+  const nextStatus = editData.status === "Aktif" ? "Non Aktif" : "Aktif";
+  setPendingStatus(nextStatus);
+  setShowStatusModal(true);
+};
 
-    setEditData(prev => ({
-      ...prev,
-      status: newStatus
-    }));
+const handleConfirmToggleStatus = () => {
+  setEditData(prev => ({
+    ...prev,
+    status: pendingStatus
+  }));
 
-    localStorage.setItem(
-      `employee_status_${employeeId}`,
-      newStatus
-    );
-  };
+  localStorage.setItem(
+    `employee_status_${employeeId}`,
+    pendingStatus
+  );
 
-
+  setShowStatusModal(false);
+};
   // ================= EDIT HANDLER =================
 
   const handleEditChange = (e) => {
@@ -1062,7 +1065,8 @@ const EmployeeDetail = ({ navigateTo, employeeId }) => {
               )
             )}
 
-            {renderDetailRow(
+            {/* BPJS HANYA MUNCUL JIKA BUKAN GAJI HARIAN */}
+            {editData.salary_type !== 'Harian' && renderDetailRow(
               'BPJS',
               isEditing ? (
                 <>
@@ -1082,7 +1086,7 @@ const EmployeeDetail = ({ navigateTo, employeeId }) => {
                   )}
                 </>
               ) : (
-                formatValue(employee.bpjs)
+                formatValue(employee.salary_type === 'Harian' ? '-' : employee.bpjs)
               )
             )}
 
@@ -1275,62 +1279,70 @@ const EmployeeDetail = ({ navigateTo, employeeId }) => {
             </div>
           ) : (
             <>
-              <div className="row g-3 mb-4">
-                <div className="col-md-2">
-                  <div className="border rounded p-3 text-center">
-                    <small className="text-muted">Hadir</small>
-                    <h5 className="mb-0 text-success">
-                      {countAttendanceStatus(attendanceData.employee.attendance, 'H')}
-                    </h5>
-                  </div>
-                </div>
+              <div className="d-flex flex-row gap-2 mb-3">
+  <div className="flex-fill">
+    <div className="border rounded p-2 text-center h-100">
+      <small className="text-muted d-block" style={{ fontSize: '11px' }}>Hadir</small>
+      <h5 className="mb-0 text-success">
+        {countAttendanceStatus(attendanceData.employee.attendance, 'H')}
+      </h5>
+    </div>
+  </div>
 
-                <div className="col-md-2">
-                  <div className="border rounded p-3 text-center">
-                    <small className="text-muted">Sakit</small>
-                    <h5 className="mb-0 text-info">
-                      {countAttendanceStatus(attendanceData.employee.attendance, 'S')}
-                    </h5>
-                  </div>
-                </div>
+  <div className="flex-fill">
+    <div className="border rounded p-2 text-center h-100">
+      <small className="text-muted d-block" style={{ fontSize: '11px' }}>Sakit</small>
+      <h5 className="mb-0 text-info">
+        {countAttendanceStatus(attendanceData.employee.attendance, 'S')}
+      </h5>
+    </div>
+  </div>
 
-                <div className="col-md-2">
-                  <div className="border rounded p-3 text-center">
-                    <small className="text-muted">Izin</small>
-                    <h5 className="mb-0 text-warning">
-                      {countAttendanceStatus(attendanceData.employee.attendance, 'I')}
-                    </h5>
-                  </div>
-                </div>
+  <div className="flex-fill">
+    <div className="border rounded p-2 text-center h-100">
+      <small className="text-muted d-block" style={{ fontSize: '11px' }}>Izin</small>
+      <h5 className="mb-0 text-warning">
+        {countAttendanceStatus(attendanceData.employee.attendance, 'I')}
+      </h5>
+    </div>
+  </div>
 
-                <div className="col-md-2">
-                  <div className="border rounded p-3 text-center">
-                    <small className="text-muted">Alpa</small>
-                    <h5 className="mb-0 text-danger">
-                      {countAttendanceStatus(attendanceData.employee.attendance, 'A')}
-                    </h5>
-                  </div>
-                </div>
+  <div className="flex-fill">
+    <div className="border rounded p-2 text-center h-100">
+      <small className="text-muted d-block" style={{ fontSize: '11px' }}>Izin (Non Gaji)</small>
+      <h5 className="mb-0" style={{ color: '#fd7e14', fontSize: '1.1rem' }}>
+        {countAttendanceStatus(attendanceData.employee.attendance, 'T')}
+      </h5>
+    </div>
+  </div>
 
-                <div className="col-md-2">
-                  <div className="border rounded p-3 text-center">
-                    <small className="text-muted">Off</small>
-                    <h5 className="mb-0 text-secondary">
-                      {countAttendanceStatus(attendanceData.employee.attendance, 'O')}
-                    </h5>
-                  </div>
-                </div>
+  <div className="flex-fill">
+    <div className="border rounded p-2 text-center h-100">
+      <small className="text-muted d-block" style={{ fontSize: '11px' }}>Alpa</small>
+      <h5 className="mb-0 text-danger">
+        {countAttendanceStatus(attendanceData.employee.attendance, 'A')}
+      </h5>
+    </div>
+  </div>
 
-                <div className="col-md-2">
-                  <div className="border rounded p-3 text-center">
-                    <small className="text-muted">Kebijakan</small>
-                    <h5 className="mb-0 text-primary">
-                      {countAttendanceStatus(attendanceData.employee.attendance, 'K')}
-                    </h5>
-                  </div>
-                </div>
-              </div>
+  <div className="flex-fill">
+    <div className="border rounded p-2 text-center h-100">
+      <small className="text-muted d-block" style={{ fontSize: '11px' }}>Off</small>
+      <h5 className="mb-0 text-secondary">
+        {countAttendanceStatus(attendanceData.employee.attendance, 'O')}
+      </h5>
+    </div>
+  </div>
 
+  <div className="flex-fill">
+    <div className="border rounded p-2 text-center h-100">
+      <small className="text-muted d-block" style={{ fontSize: '11px' }}>Kebijakan</small>
+      <h5 className="mb-0 text-primary">
+        {countAttendanceStatus(attendanceData.employee.attendance, 'K')}
+      </h5>
+    </div>
+  </div>
+</div>
               <div className="card">
                 <div className="card-header text-center bg-white">
                   <strong>{getAttendanceMonthName(attendanceMonth)}</strong>
@@ -1370,7 +1382,7 @@ const EmployeeDetail = ({ navigateTo, employeeId }) => {
                           (_, index) => index + 1
                         ).map((day) => {
                           const currentStatus =
-                            attendanceData.employee.attendance?.[day]?.status || 'Hx';
+                            attendanceData.employee.attendance?.[day]?.status || 'H';
 
                           const statusData = getAttendanceStatusData(currentStatus);
 
@@ -1748,10 +1760,67 @@ const EmployeeDetail = ({ navigateTo, employeeId }) => {
 
         </div>
       )}
-      
+      {/* ========================================= */}
+      {/* MASUKKAN MODAL KONFIRMASI STATUS DI SINI  */}
+      {/* ========================================= */}
+      {showStatusModal && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0,0,0,0.4)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999
+          }}
+        >
+          <div
+            style={{
+              background: '#fff',
+              width: '380px',
+              borderRadius: '8px',
+              padding: '28px',
+              boxShadow: '0 8px 25px rgba(0,0,0,0.18)',
+              textAlign: 'center'
+            }}
+          >
+            <div className="mb-3">
+              <i className="fas fa-exclamation-triangle fa-2x text-warning mb-2"></i>
+              <h5>Konfirmasi Perubahan Status</h5>
+              <p className="text-muted text-sm mb-0">
+                Apakah Anda yakin ingin mengubah status karyawan ini menjadi{' '}
+                <strong className={pendingStatus === 'Aktif' ? 'text-success' : 'text-danger'}>
+                  {pendingStatus}
+                </strong>?
+              </p>
+            </div>
+
+            <div className="d-flex gap-2 justify-content-center mt-4">
+              <button
+                type="button"
+                className="btn btn-secondary px-4"
+                onClick={() => setShowStatusModal(false)}
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                className={`btn px-4 ${pendingStatus === 'Aktif' ? 'btn-success' : 'btn-danger'}`}
+                onClick={handleConfirmToggleStatus}
+              >
+                Ya, Ubah
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };
-
 
 export default EmployeeDetail;
