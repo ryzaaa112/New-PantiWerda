@@ -4,13 +4,19 @@ import * as XLSX from 'xlsx'; // Import library di bagian atas file Anda
 
 const EmployeePayroll = ({ navigateTo }) => {
   const currentDate = new Date();
-
+  const [selectedSalaryType, setSelectedSalaryType] = useState('Harian');
+  const [selectedPeriod, setSelectedPeriod] = useState(1);
   const [selectedMonth, setSelectedMonth] = useState(currentDate.getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState(currentDate.getFullYear());
   const [showMonthPicker, setShowMonthPicker] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [selectedPayroll, setSelectedPayroll] = useState(null);
-  const payrollMonth = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}`;
+  const baseMonth = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}`;
+
+  const payrollMonth =
+    selectedSalaryType === 'Harian'
+      ? `${baseMonth}-P${selectedPeriod}`
+      : baseMonth;
 
   const monthOptions = [
     { value: 1, label: 'Jan' },
@@ -48,13 +54,16 @@ const EmployeePayroll = ({ navigateTo }) => {
 
   useEffect(() => {
     fetchPayrollData();
-  }, [payrollMonth]);
+  }, [payrollMonth, selectedSalaryType]);
 
   const fetchPayrollData = async () => {
     try {
       setIsLoading(true);
 
-      const data = await employeePayrollsAPI.getMonthly(payrollMonth);
+      const data = await employeePayrollsAPI.getMonthly(
+        payrollMonth,
+        selectedSalaryType
+      );
 
       setPayrollData(data);
     } catch (error) {
@@ -78,12 +87,24 @@ const EmployeePayroll = ({ navigateTo }) => {
   };
 
   const getMonthName = (monthValue) => {
-    const [year, month] = monthValue.split('-').map(Number);
+    const baseMonth = monthValue.includes('-P')
+      ? monthValue.split('-P')[0]
+      : monthValue;
 
-    return new Date(year, month - 1, 1).toLocaleDateString('id-ID', {
+    const [year, month] = baseMonth.split('-').map(Number);
+
+    let title = new Date(year, month - 1, 1).toLocaleDateString('id-ID', {
       month: 'long',
       year: 'numeric'
     });
+
+    if (monthValue.endsWith('-P1')) {
+      title += ' - Periode 1';
+    } else if (monthValue.endsWith('-P2')) {
+      title += ' - Periode 2';
+    }
+
+    return title;
   };
 
   const handlePayEmployee = async (employeeId) => {
@@ -116,7 +137,7 @@ const handleDownloadExcel = () => {
     "Jabatan": item.position || '-',
     "Tipe Gaji": item.salary_type || '-',
     "Gaji Pokok": item.base_salary,
-    "Bonus": item.additional_variable,
+    "Variabel tambahan": item.additional_variable,
     "BPJS": item.bpjs_deduction,
     "Pinjaman": item.loan_deduction,
     "Potongan Absensi": item.attendance_deduction, // <--- TAMBAHKAN BARIS INI
@@ -155,6 +176,12 @@ const handleDownloadExcel = () => {
   XLSX.writeFile(wb, `Rekap_Gaji_${payrollMonth}.xlsx`);
 };
 
+//  TAMBAHKAN LOGIKA FILTER INI
+  const filteredPayrolls = payrollData?.payrolls?.filter(item => {
+    if (selectedSalaryType === 'Semua') return true;
+    return item.salary_type === selectedSalaryType;
+  }) || [];
+
   return (
     <div className="page-wrapper">
 
@@ -177,7 +204,47 @@ const handleDownloadExcel = () => {
           </p>
         </div>
         <div className="d-flex gap-2 align-items-end">
-    
+          
+            {selectedSalaryType == 'Harian' && (
+              <div className="d-flex gap-2 me-2">
+                <button
+                  className={`btn ${selectedPeriod === 1 ? "btn-primary" : "btn-outline-primary"}`}
+                  onClick={() => setSelectedPeriod(1)}
+                >
+                  1 - 15
+                </button>
+                <button
+                  className={`btn ${selectedPeriod === 2 ? "btn-primary" : "btn-outline-primary"}`}
+                  onClick={() => setSelectedPeriod(2)}
+                >
+                  16 - Akhir
+                </button>
+              </div>
+            )}
+
+            {/* Dropdown Tipe Karyawan */}
+          <div>
+            <label className="form-label mb-1" style={{ fontSize: '12px', color: '#6c757d' }}>
+              Tipe Karyawan
+            </label>
+            <select
+              className="form-select form-select-sm"
+              style={{ minWidth: '130px' }}
+              value={selectedSalaryType}
+              onChange={(e) => {
+                const type = e.target.value;
+                setSelectedSalaryType(type);
+
+                if (type === 'Bulanan') {
+                  setSelectedPeriod(2);
+                }
+              }}
+            >
+              <option value="Bulanan">Bulanan</option>
+              <option value="Harian">Harian</option>
+            </select>
+          </div>
+ 
     {/* Tombol Download excel */}
     <button 
       className="btn btn-success" 
@@ -314,7 +381,7 @@ const handleDownloadExcel = () => {
         <>
           <div className="row g-3 mb-4">
 
-            <div className="col-md-3">
+            <div className="col-md-4">
               <div className="border rounded p-3">
                 <small className="text-muted">Total Gaji Pokok</small>
                 <h5 className="mb-0">
@@ -323,16 +390,7 @@ const handleDownloadExcel = () => {
               </div>
             </div>
 
-            <div className="col-md-3">
-              <div className="border rounded p-3">
-                <small className="text-muted">Total Bonus</small>
-                <h5 className="mb-0 text-success">
-                  {formatCurrency(payrollData.summary.total_additional_variable)}
-                </h5>
-              </div>
-            </div>
-
-            <div className="col-md-3">
+            <div className="col-md-4">
               <div className="border rounded p-3">
                 <small className="text-muted">Total Potongan</small>
                 <h5 className="mb-0 text-danger">
@@ -344,7 +402,7 @@ const handleDownloadExcel = () => {
               </div>
             </div>
 
-            <div className="col-md-3">
+            <div className="col-md-4">
               <div className="border rounded p-3">
                 <small className="text-muted">Total Dibayar</small>
                 <h5 className="mb-0 text-primary">
@@ -384,9 +442,13 @@ const handleDownloadExcel = () => {
                     <th>Jabatan</th>
                     <th>Tipe Gaji</th>
                     <th>Gaji Pokok</th>
-                    <th>Bonus</th>
-                    <th>BPJS</th>
-                    <th>Pinjaman</th>
+                    <th>Variabel tambahan</th>
+                        {selectedSalaryType === 'Bulanan' && (
+                          <>
+                            <th>BPJS</th>
+                            <th>Pinjaman</th>
+                          </>
+                        )}
                     <th>Potongan Absensi</th>
                     <th>Total Dibayar</th>
                     <th>Status</th>
@@ -395,14 +457,15 @@ const handleDownloadExcel = () => {
                 </thead>
 
                 <tbody>
-                  {payrollData.payrolls.length === 0 ? (
+                  {filteredPayrolls.length === 0 ? (
                     <tr>
-                      <td colSpan="11" className="text-center text-muted py-4">
+                      {/* PERUBAHAN 1: colSpan berubah otomatis */}
+                      <td colSpan={selectedSalaryType === 'Bulanan' ? 11 : 9} className="text-center text-muted py-4">
                         Belum ada data karyawan.
                       </td>
                     </tr>
                   ) : (
-                    payrollData.payrolls.map((item) => (
+                    filteredPayrolls.map((item) => (
                       <tr key={item.employee_id}>
                         <td className="fw-semibold">
                           {item.employee_name}
@@ -426,13 +489,18 @@ const handleDownloadExcel = () => {
                           + {formatCurrency(item.additional_variable)}
                         </td>
 
-                        <td className="text-danger fw-semibold">
-                          - {formatCurrency(item.bpjs_deduction)}
-                        </td>
+                        {/* PERUBAHAN 2: BPJS dan Pinjaman dibungkus kondisi Bulanan */}
+                        {selectedSalaryType === 'Bulanan' && (
+                          <>
+                            <td className="text-danger fw-semibold">
+                              - {formatCurrency(item.bpjs_deduction)}
+                            </td>
 
-                        <td className="text-danger fw-semibold">
-                          - {formatCurrency(item.loan_deduction)}
-                        </td>
+                            <td className="text-danger fw-semibold">
+                              - {formatCurrency(item.loan_deduction)}
+                            </td>
+                          </>
+                        )}
 
                         <td className="text-danger fw-semibold">
                           - {formatCurrency(item.attendance_deduction)}

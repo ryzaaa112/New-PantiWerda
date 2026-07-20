@@ -95,8 +95,11 @@ export const employeeLoansAPI = {
 
 // Employee Payrolls
 export const employeePayrollsAPI = {
-  getMonthly: (month) => api.get('/employee-payrolls', {
-    params: { month }
+  getMonthly: (month, salaryType) => api.get('/employee-payrolls', {
+    params: {
+      month,
+      salaryType
+    }
   }),
 
   payEmployee: (data) => api.post('/employee-payrolls/pay', data)

@@ -2114,15 +2114,6 @@ app.get('/api/employee-attendance/export', async (req, res) => {
     });
   }
 });
-// Error handling yang lebih baik
-app.use((err, req, res, next) => {
-  console.error('Server Error:', err.stack);
-  res.status(500).json({
-    error: 'Something went wrong!',
-    message: err.message,
-    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
-  });
-});
 
 // GET all users (admin only)
 app.get('/api/users', async (req, res) => {
@@ -2728,9 +2719,9 @@ app.put('/api/employees/:id', async (req, res) => {
       bpjs
     } = req.body;
 
-    await db.run(`
-      UPDATE employees
-      SET
+    const result = await db.run(`
+    UPDATE employees
+    SET
         religion = ?,
         phone = ?,
         address = ?,
@@ -2739,18 +2730,24 @@ app.put('/api/employees/:id', async (req, res) => {
         salary_type = ?,
         additional_variable = ?,
         bpjs = ?
-      WHERE id = ?
-    `, [
-      religion,
-      phone,
-      address,
-      position,
-      salary,
-      salary_type,
-      additional_variable,
-      bpjs,
-      id
+    WHERE id = ?
+    `,[
+        religion,
+        phone,
+        address,
+        position,
+        salary,
+        salary_type,
+        additional_variable,
+        bpjs,
+        id
     ]);
+
+    if (result.changes === 0) {
+      return res.status(404).json({
+          error: 'Data karyawan tidak ditemukan'
+      });
+    }
 
     res.json({
       success: true,
@@ -2771,14 +2768,20 @@ app.delete('/api/employees/:id', async (req, res) => {
   try {
     const { id } = req.params;
 
-    await db.run(`
-      DELETE FROM employees
-      WHERE id = ?
-    `, [id]);
+    const result = await db.run(`
+    DELETE FROM employees
+    WHERE id = ?
+    `,[id]);
+
+    if(result.changes===0){
+        return res.status(404).json({
+            error:'Data karyawan tidak ditemukan'
+        });
+    }
 
     res.json({
-      success: true,
-      message: 'Data karyawan berhasil dihapus'
+        success:true,
+        message:'Data karyawan berhasil dihapus'
     });
   } catch (error) {
     console.error('Error deleting employee:', error);
@@ -2811,29 +2814,36 @@ const isDailyEmployee = (salaryType) => {
   return String(salaryType || '').toLowerCase() === 'harian';
 };
 
-const getAttendancePayrollInfo = async (employeeId, payrollMonth, salaryType) => {
-  // Hanya proses jika karyawan harian
+const getAttendancePayrollInfo = async (employeeId, baseMonth, period, salaryType) => {
   if (!isDailyEmployee(salaryType)) {
     return { paid_days: 0, unpaid_days: 0, attendance_deduction: 0 };
   }
 
-  // 1. Ambil jumlah hari total di bulan tersebut
-  const [year, month] = payrollMonth.split('-').map(Number);
-  const daysInMonth = new Date(year, month, 0).getDate();
+  const [year, month] = baseMonth.split('-').map(Number);
+  const lastDay = new Date(year, month, 0).getDate();
+  
+  const startDate = period === 1 ? `${baseMonth}-01` : `${baseMonth}-16`;
+  const endDate = period === 1 ? `${baseMonth}-15` : `${baseMonth}-${lastDay}`;
 
-  // 2. Hitung hari TIDAK MASUK (Alpa atau Tidak Dibayar) saja
+  // Hitung total hari kalender dalam rentang periode tersebut (misal: 15 hari untuk Periode 1)
+  const startDayNum = parseInt(startDate.split('-')[2]);
+  const endDayNum = parseInt(endDate.split('-')[2]);
+  const totalDaysInPeriod = (endDayNum - startDayNum) + 1;
+
+  // Hitung jumlah hari yang secara eksplisit ditandai TIDAK MASUK (Alpa / T)
   const unpaidResult = await db.get(`
     SELECT COUNT(*) as count
     FROM employee_attendance
     WHERE employee_id = ?
-    AND strftime('%Y-%m', attendance_date) = ?
+    AND attendance_date BETWEEN ? AND ?
     AND status IN ('A', 'T')
-  `, [employeeId, payrollMonth]);
+  `, [employeeId, startDate, endDate]);
 
   const unpaidDays = unpaidResult?.count || 0;
-  
-  // 3. Hari dibayar adalah total hari di bulan itu dikurangi hari yang bolos
-  const paidDays = daysInMonth - unpaidDays;
+
+  // Secara default, hari dibayar adalah total hari periode dikurangi yang bolos (Alpa/T)
+  // Jadi kalau belum diapa-apain (unpaidDays = 0), otomatis dihitung masuk penuh sejumlah hari dalam periode!
+  const paidDays = Math.max(0, totalDaysInPeriod - unpaidDays);
 
   return {
     paid_days: paidDays,
@@ -2842,12 +2852,19 @@ const getAttendancePayrollInfo = async (employeeId, payrollMonth, salaryType) =>
   };
 };
 
-// GET PAYROLL SUMMARY BY MONTH
 app.get('/api/employee-payrolls', async (req, res) => {
   try {
-    const payrollMonth = req.query.month || new Date().toISOString().slice(0, 7);
+    const payrollMonth = req.query.month || `${new Date().toISOString().slice(0, 7)}`;
+    const salaryType = req.query.salaryType;
+    const hasPeriod = payrollMonth.includes('-P');
+    const isPeriod1 = payrollMonth.endsWith('-P1');
+    const baseMonth = hasPeriod
+      ? payrollMonth.split('-P')[0]
+      : payrollMonth;
 
-    if (!isValidMonth(payrollMonth)) {
+    const periodNumber = isPeriod1 ? 1 : 2;
+
+    if (!isValidMonth(baseMonth)) {
       return res.status(400).json({
         error: 'Format bulan harus YYYY-MM, contoh: 2026-01'
       });
@@ -2860,10 +2877,19 @@ app.get('/api/employee-payrolls', async (req, res) => {
     `);
 
     const payrolls = [];
-
-    const [year, month] = payrollMonth.split('-').map(Number);
+    const [year, month] = baseMonth.split('-').map(Number);
 
     for (const employee of employees) {
+      const isDaily = isDailyEmployee(employee.salary_type);
+
+      if (salaryType === 'Harian' && !isDaily) {
+        continue;
+      }
+
+      if (salaryType === 'Bulanan' && isDaily) {
+        continue;
+      }
+
       const savedPayroll = await db.get(`
         SELECT *
         FROM employee_payrolls
@@ -2884,11 +2910,19 @@ app.get('/api/employee-payrolls', async (req, res) => {
 
       const salaryRate = parseMoneyValue(employee.salary);
       const additionalVariable = parseMoneyValue(employee.additional_variable);
-      const bpjsDeduction = parseMoneyValue(employee.bpjs);
+      
+      // Karyawan Harian otomatis BPJS dan Pinjamannya = 0
+      const bpjsDeduction = isDaily ? 0 : parseMoneyValue(employee.bpjs);
+      const loanDeduction = isDaily ? 0 : (
+        currentLoanInstallment && currentLoanInstallment.status !== 'SUDAH BAYAR'
+          ? parseMoneyValue(currentLoanInstallment.bill_amount)
+          : 0
+      );
 
       const attendanceInfo = await getAttendancePayrollInfo(
         employee.id,
-        payrollMonth,
+        baseMonth,
+        periodNumber,
         employee.salary_type
       );
 
@@ -2896,17 +2930,8 @@ app.get('/api/employee-payrolls', async (req, res) => {
       const unpaidDays = attendanceInfo.unpaid_days;
       const attendanceDeduction = attendanceInfo.attendance_deduction;
 
-      const baseSalary = isDailyEmployee(employee.salary_type)
-        ? salaryRate * paidDays
-        : salaryRate;
-
-      const loanDeduction =
-        currentLoanInstallment && currentLoanInstallment.status !== 'SUDAH BAYAR'
-          ? parseMoneyValue(currentLoanInstallment.bill_amount)
-          : 0;
-
-      const totalSalary =
-        baseSalary + additionalVariable - bpjsDeduction - loanDeduction - attendanceDeduction;
+      const baseSalary = isDaily ? (salaryRate * paidDays) : salaryRate;
+      const totalSalary = baseSalary + additionalVariable - bpjsDeduction - loanDeduction - attendanceDeduction;
 
       payrolls.push({
         employee_id: employee.id,
@@ -2978,8 +3003,12 @@ app.post('/api/employee-payrolls/pay', async (req, res) => {
         error: 'employee_id dan payroll_month wajib diisi'
       });
     }
+    // Deteksi baseMonth dan period dari payroll_month (misal: '2026-06-P1')
+    const isPeriod1 = payroll_month.endsWith('-P1');
+    const baseMonth = payroll_month.split('-P')[0];
+    const periodNumber = isPeriod1 ? 1 : 2;
 
-    if (!isValidMonth(payroll_month)) {
+    if (!isValidMonth(baseMonth)) {
       return res.status(400).json({
         error: 'Format bulan harus YYYY-MM, contoh: 2026-01'
       });
@@ -2994,6 +3023,14 @@ app.post('/api/employee-payrolls/pay', async (req, res) => {
     if (!employee) {
       return res.status(404).json({
         error: 'Karyawan tidak ditemukan'
+      });
+    }
+
+    const isDaily = isDailyEmployee(employee.salary_type);
+
+    if (!isDaily && isPeriod1) {
+      return res.status(400).json({
+        error: 'Karyawan bulanan hanya dapat dibayar pada Periode 2'
       });
     }
 
@@ -3012,24 +3049,24 @@ app.post('/api/employee-payrolls/pay', async (req, res) => {
 
     const salaryRate = parseMoneyValue(employee.salary);
     const additionalVariable = parseMoneyValue(employee.additional_variable);
-    const bpjsDeduction = parseMoneyValue(employee.bpjs);
+    const bpjsDeduction = isDaily ? 0 : parseMoneyValue(employee.bpjs);
 
     const attendanceInfo = await getAttendancePayrollInfo(
       employee_id,
-      payroll_month,
+      baseMonth,
+      periodNumber,
       employee.salary_type
     );
 
     const attendanceDeduction = attendanceInfo.attendance_deduction;
 
-    const baseSalary = isDailyEmployee(employee.salary_type)
-      ? salaryRate * attendanceInfo.paid_days
-      : salaryRate;
+    const baseSalary = isDaily ? (salaryRate * attendanceInfo.paid_days) : salaryRate;
 
-    const loanDeduction =
+    const loanDeduction = isDaily ? 0 : (
       currentLoanInstallment && currentLoanInstallment.status !== 'SUDAH BAYAR'
         ? parseMoneyValue(currentLoanInstallment.bill_amount)
-        : 0;
+        : 0
+    );
 
     const totalSalary =
       baseSalary + additionalVariable - bpjsDeduction - loanDeduction - attendanceDeduction;
