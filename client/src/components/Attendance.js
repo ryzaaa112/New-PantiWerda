@@ -69,16 +69,30 @@ const Attendance = ({ navigateTo }) => {
   const [loading, setLoading] = useState(true);
   const [savingCell, setSavingCell] = useState(null);
   const [page, setPage] = useState(1);
-  const days = useMemo(() => {
+  const [attendanceMode, setAttendanceMode] = useState("Harian");
+  const filteredEmployees = useMemo(() => {
+  return employees.filter((employee) => {
+    if (attendanceMode === "Harian") {
+      return employee.salary_type === "Harian";
+    }
+
+    return employee.salary_type === "Bulanan";
+  });
+}, [employees, attendanceMode]);
+ const days = useMemo(() => {
   const allDays = Array.from(
     { length: daysInMonth },
     (_, index) => index + 1
   );
 
+  if (attendanceMode === "Bulanan") {
+    return allDays;
+  }
+
   return page === 1
     ? allDays.slice(0, 15)
     : allDays.slice(15);
-}, [daysInMonth, page]);
+}, [daysInMonth, page, attendanceMode]);
 
   useEffect(() => {
     fetchAttendance();
@@ -109,6 +123,23 @@ const Attendance = ({ navigateTo }) => {
     return STATUS_LIST.find((item) => item.code === status);
   };
 
+  const isAttendanceLocked = (day) => {
+  const attendanceDate = new Date(
+    `${month}-${String(day).padStart(2, "0")}`
+  );
+
+  attendanceDate.setHours(0, 0, 0, 0);
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const diffDays = Math.floor(
+    (today - attendanceDate) / (1000 * 60 * 60 * 24)
+  );
+
+  return diffDays > 2;
+};
+
   const getNextStatus = (currentStatus) => {
     const currentIndex = STATUS_ORDER.indexOf(currentStatus || '');
 
@@ -120,6 +151,22 @@ const Attendance = ({ navigateTo }) => {
   const updateAttendanceCell = async (employeeId, day, currentStatus) => {
     const nextStatus = getNextStatus(currentStatus);
     const attendanceDate = `${month}-${pad2(day)}`;
+    const today = new Date();
+
+today.setHours(0,0,0,0);
+
+const selected = new Date(attendanceDate);
+
+selected.setHours(0,0,0,0);
+
+const diffDays = Math.floor(
+  (today - selected) / (1000*60*60*24)
+);
+
+if (diffDays > 2) {
+  alert("Absensi H+2 sudah terkunci.");
+  return;
+}
     const cellKey = `${employeeId}-${day}`;
 
     setSavingCell(cellKey);
@@ -356,29 +403,44 @@ const Attendance = ({ navigateTo }) => {
               </div>
             )}
           </div>
-          <div className="d-flex gap-2">
-            <button
-              className={`btn ${
-                page === 1 
-                ? "btn-primary" 
-                : "btn-outline-primary"
-              }`}
-              onClick={() => setPage(1)}
-            >
-              1 - 15
-            </button>
+        <div style={{ minWidth: "170px" }}>
+  <label className="form-label mb-1">
+    Tipe Gaji
+  </label>
 
-            <button
-              className={`btn ${
-                page === 2 
-                ? "btn-primary" 
-                : "btn-outline-primary"
-              }`}
-              onClick={() => setPage(2)}
-            >
-              16 - {daysInMonth}
-            </button>
-          </div>
+  <select
+    className="form-select"
+    value={attendanceMode}
+    onChange={(e) => {
+      setAttendanceMode(e.target.value);
+      setPage(1);
+    }}
+  >
+    <option value="Harian">Harian</option>
+    <option value="Bulanan">Bulanan</option>
+  </select>
+</div>
+{attendanceMode === "Harian" && (
+  <div className="d-flex gap-2">
+    <button
+      className={`btn ${
+        page === 1 ? "btn-primary" : "btn-outline-primary"
+      }`}
+      onClick={() => setPage(1)}
+    >
+      1 - 15
+    </button>
+
+    <button
+      className={`btn ${
+        page === 2 ? "btn-primary" : "btn-outline-primary"
+      }`}
+      onClick={() => setPage(2)}
+    >
+      16 - {daysInMonth}
+    </button>
+  </div>
+)}
 
           <button className="btn btn-dark" onClick={downloadExcel} disabled={loading}>
             <i className="fas fa-file-excel me-1"></i> Download Excel
@@ -409,7 +471,7 @@ const Attendance = ({ navigateTo }) => {
           <div className="spinner-border text-primary" role="status"></div>
           <p className="mt-2">Memuat data absensi...</p>
         </div>
-      ) : employees.length === 0 ? (
+      ) : filteredEmployees.length === 0 ? (
         <div className="text-center py-5">
           <i className="fas fa-user-tie fa-3x text-muted mb-3"></i>
           <p className="text-muted">
@@ -455,7 +517,7 @@ const Attendance = ({ navigateTo }) => {
               </thead>
 
               <tbody>
-                {employees.map((employee) => (
+                {filteredEmployees.map((employee) => (
                   <tr key={employee.id}>
                     <td className="fw-semibold">{employee.name}</td>
                     <td className="text-center">
@@ -464,24 +526,33 @@ const Attendance = ({ navigateTo }) => {
 
                     {days.map((day) => {
                       const currentStatus = employee.attendance?.[day]?.status || 'H';
+                      const locked = isAttendanceLocked(day);
                       const statusData = getStatusData(currentStatus);
                       const cellKey = `${employee.id}-${day}`;
 
+                      
+                      
                       return (
                         <td key={day} className="text-center p-1">
+                          
                           <button
                             type="button"
                             className={`btn btn-sm w-100 ${
-                              statusData?.className || 'btn-outline-light text-dark'
-                            }`}
+                            locked
+                              ? "btn-secondary"
+                              : statusData?.className || "btn-outline-light text-dark"
+                          }`}
                             style={{
-                              minHeight: 30,
-                              fontWeight: 700,
-                              borderColor: '#dee2e6',
-                            }}
-                            onClick={() =>
-                              updateAttendanceCell(employee.id, day, currentStatus)
-                            }
+                            minHeight: 30,
+                            fontWeight: 700,
+                            borderColor: "#dee2e6",
+                            opacity: locked ? 0.6 : 1,
+                            cursor: locked ? "not-allowed" : "pointer",
+                        }}
+                            onClick={() => {
+                              if (locked) return;
+                              updateAttendanceCell(employee.id, day, currentStatus);
+                          }}
                             disabled={savingCell === cellKey}
                           >
                             {savingCell === cellKey ? '...' : currentStatus}

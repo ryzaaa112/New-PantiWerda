@@ -1910,6 +1910,27 @@ app.get('/api/employee-attendance', async (req, res) => {
 app.post('/api/employee-attendance', async (req, res) => {
   try {
     const { employee_id, attendance_date, status, notes, recorded_by } = req.body;
+    // ===========================
+// LOCK H+2
+// ===========================
+const today = new Date();
+
+today.setHours(0, 0, 0, 0);
+
+const attDate = new Date(attendance_date);
+
+attDate.setHours(0, 0, 0, 0);
+
+const diffDays = Math.floor(
+  (today - attDate) / (1000 * 60 * 60 * 24)
+);
+
+// kalau lebih dari 2 hari lalu -> lock
+if (diffDays > 2) {
+  return res.status(403).json({
+    error: 'Absensi lebih dari H+2 tidak dapat diubah.'
+  });
+}
 
     if (!employee_id || !isValidDateValue(attendance_date)) {
       return res.status(400).json({
