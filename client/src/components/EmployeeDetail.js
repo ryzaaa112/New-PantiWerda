@@ -117,6 +117,11 @@ const EmployeeDetail = ({ navigateTo, employeeId }) => {
         religion: employeeData.religion || '',
         phone: employeeData.phone || '',
         address: employeeData.address || '',
+        ktp_number: employeeData.ktp_number || '',
+        email: employeeData.email || '',
+        bank_account_number: employeeData.bank_account_number || '',
+        bank_account_name: employeeData.bank_account_name || '',
+        bank_name: employeeData.bank_name || '',
         position: employeeData.position || '',
         salary: employeeData.salary || '',
         salary_type: employeeData.salary_type || 'Bulanan',
@@ -208,6 +213,21 @@ const EmployeeDetail = ({ navigateTo, employeeId }) => {
       isValid = false;
     }
 
+    if (editData.ktp_number && !/^\d{16}$/.test(editData.ktp_number)) {
+      newErrors.ktp_number = 'Nomor KTP harus terdiri dari 16 digit angka';
+      isValid = false;
+    }
+
+    if (editData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(editData.email)) {
+      newErrors.email = 'Format email tidak valid';
+      isValid = false;
+    }
+
+    if (editData.bank_account_number && !/^\d+$/.test(editData.bank_account_number)) {
+      newErrors.bank_account_number = 'Nomor rekening harus berupa angka';
+      isValid = false;
+    }
+
     const salaryError = validateSalary(editData.salary);
     if (salaryError) {
       newErrors.salary = salaryError;
@@ -264,6 +284,12 @@ const handleConfirmToggleStatus = () => {
 
     if (name === 'phone') {
       error = validatePhone(value);
+    } else if (name === 'ktp_number') {
+      error = value && !/^\d{16}$/.test(value) ? 'Nomor KTP harus terdiri dari 16 digit angka' : '';
+    } else if (name === 'email') {
+      error = value && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value) ? 'Format email tidak valid' : '';
+    } else if (name === 'bank_account_number') {
+      error = value && !/^\d+$/.test(value) ? 'Nomor rekening harus berupa angka' : '';
     } else if (name === 'salary') {
       error = validateSalary(value);
     } else if (name === 'bpjs') {
@@ -288,6 +314,11 @@ const handleConfirmToggleStatus = () => {
       religion: employee.religion || '',
       phone: employee.phone || '',
       address: employee.address || '',
+      ktp_number: employee.ktp_number || '',
+      email: employee.email || '',
+      bank_account_number: employee.bank_account_number || '',
+      bank_account_name: employee.bank_account_name || '',
+      bank_name: employee.bank_name || '',
       position: employee.position || '',
       salary: employee.salary || '',
       salary_type: employee.salary_type || 'Bulanan',
@@ -946,6 +977,46 @@ const handleConfirmToggleStatus = () => {
               formatValue(employee.birth_date)
             )}
 
+            {renderDetailRow(
+              'Nomor KTP',
+              isEditing ? (
+                <>
+                  <input
+                    type="text"
+                    className={`form-control form-control-sm ${editErrors.ktp_number ? 'is-invalid' : ''}`}
+                    name="ktp_number"
+                    value={editData.ktp_number}
+                    onChange={handleEditChange}
+                    placeholder="16 digit NIK/KTP"
+                    maxLength="16"
+                    inputMode="numeric"
+                  />
+                  {editErrors.ktp_number && <div className="invalid-feedback">{editErrors.ktp_number}</div>}
+                </>
+              ) : (
+                formatValue(employee.ktp_number)
+              )
+            )}
+
+            {renderDetailRow(
+              'Alamat Email',
+              isEditing ? (
+                <>
+                  <input
+                    type="email"
+                    className={`form-control form-control-sm ${editErrors.email ? 'is-invalid' : ''}`}
+                    name="email"
+                    value={editData.email}
+                    onChange={handleEditChange}
+                    placeholder="contoh@email.com"
+                  />
+                  {editErrors.email && <div className="invalid-feedback">{editErrors.email}</div>}
+                </>
+              ) : (
+                formatValue(employee.email)
+              )
+            )}
+
             {/* BISA EDIT */}
             {renderDetailRow(
               'Gaji',
@@ -1087,6 +1158,58 @@ const handleConfirmToggleStatus = () => {
                 </>
               ) : (
                 formatValue(employee.salary_type === 'Harian' ? '-' : employee.bpjs)
+              )
+            )}
+
+            {renderDetailRow(
+              'Nomor Rekening',
+              isEditing ? (
+                <>
+                  <input
+                    type="text"
+                    className={`form-control form-control-sm ${editErrors.bank_account_number ? 'is-invalid' : ''}`}
+                    name="bank_account_number"
+                    value={editData.bank_account_number}
+                    onChange={handleEditChange}
+                    placeholder="Nomor rekening"
+                    inputMode="numeric"
+                  />
+                  {editErrors.bank_account_number && <div className="invalid-feedback">{editErrors.bank_account_number}</div>}
+                </>
+              ) : (
+                formatValue(employee.bank_account_number)
+              )
+            )}
+
+            {renderDetailRow(
+              'Atas Nama Rekening',
+              isEditing ? (
+                <input
+                  type="text"
+                  className="form-control form-control-sm"
+                  name="bank_account_name"
+                  value={editData.bank_account_name}
+                  onChange={handleEditChange}
+                  placeholder="Nama pemilik rekening"
+                />
+              ) : (
+                formatValue(employee.bank_account_name)
+              )
+            )}
+
+            {renderDetailRow(
+              'Nama Bank',
+              isEditing ? (
+                <input
+                  type="text"
+                  className="form-control form-control-sm"
+                  name="bank_name"
+                  value={editData.bank_name}
+                  onChange={handleEditChange}
+                  placeholder="Contoh: BCA"
+                />
+              ) : (
+                formatValue(employee.bank_name)
               )
             )}
 

@@ -100,9 +100,7 @@ export const employeePayrollsAPI = {
       month,
       salaryType
     }
-  }),
-
-  payEmployee: (data) => api.post('/employee-payrolls/pay', data)
+  })
 };
 
 // Daily Records

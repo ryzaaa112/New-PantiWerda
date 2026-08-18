@@ -9,8 +9,6 @@ const EmployeePayroll = ({ navigateTo }) => {
   const [selectedMonth, setSelectedMonth] = useState(currentDate.getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState(currentDate.getFullYear());
   const [showMonthPicker, setShowMonthPicker] = useState(false);
-  const [showPaymentModal, setShowPaymentModal] = useState(false);
-  const [selectedPayroll, setSelectedPayroll] = useState(null);
   const baseMonth = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}`;
 
   const payrollMonth =
@@ -50,7 +48,6 @@ const EmployeePayroll = ({ navigateTo }) => {
 
   const [payrollData, setPayrollData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [payingEmployeeId, setPayingEmployeeId] = useState(null);
 
   useEffect(() => {
     fetchPayrollData();
@@ -106,27 +103,6 @@ const EmployeePayroll = ({ navigateTo }) => {
 
     return title;
   };
-
-  const handlePayEmployee = async (employeeId) => {
-    try {
-      setPayingEmployeeId(employeeId);
-
-      await employeePayrollsAPI.payEmployee({
-        employee_id: employeeId,
-        payroll_month: payrollMonth
-      });
-
-      alert('✅ Gaji karyawan berhasil dibayar');
-
-      fetchPayrollData();
-    } catch (error) {
-      console.error('Error paying employee:', error);
-      alert(error.error || 'Gagal membayar gaji karyawan');
-    } finally {
-      setPayingEmployeeId(null);
-    }
-  };
-
 
 const handleDownloadExcel = () => {
   if (!payrollData || !payrollData.payrolls) return;
@@ -443,16 +419,15 @@ const handleDownloadExcel = () => {
                     <th>Tipe Gaji</th>
                     <th>Gaji Pokok</th>
                     <th>Variabel tambahan</th>
+                    <th>BPJS</th>
                         {selectedSalaryType === 'Bulanan' && (
                           <>
-                            <th>BPJS</th>
                             <th>Pinjaman</th>
                           </>
                         )}
                     <th>Potongan Absensi</th>
                     <th>Total Dibayar</th>
                     <th>Status</th>
-                    <th>Aksi</th>
                   </tr>
                 </thead>
 
@@ -489,13 +464,13 @@ const handleDownloadExcel = () => {
                           + {formatCurrency(item.additional_variable)}
                         </td>
 
+                        <td className="text-danger fw-semibold">
+                          - {formatCurrency(item.bpjs_deduction)}
+                        </td>
+
                         {/* PERUBAHAN 2: BPJS dan Pinjaman dibungkus kondisi Bulanan */}
                         {selectedSalaryType === 'Bulanan' && (
                           <>
-                            <td className="text-danger fw-semibold">
-                              - {formatCurrency(item.bpjs_deduction)}
-                            </td>
-
                             <td className="text-danger fw-semibold">
                               - {formatCurrency(item.loan_deduction)}
                             </td>
@@ -515,7 +490,6 @@ const handleDownloadExcel = () => {
                         <td className="fw-bold text-primary">
                           {formatCurrency(item.total_salary)}
                         </td>
-
                         <td>
                           {item.status === 'Sudah Dibayar' ? (
                             <span className="badge bg-success">
@@ -527,37 +501,6 @@ const handleDownloadExcel = () => {
                             </span>
                           )}
                         </td>
-
-                        <td>
-                          {item.status === 'Sudah Dibayar' ? (
-                            <button
-                              type="button"
-                              className="btn btn-sm btn-secondary"
-                              disabled
-                            >
-                              Selesai
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              className="btn btn-sm btn-primary"
-                              disabled={payingEmployeeId === item.employee_id}
-                              onClick={() => {
-                                setSelectedPayroll(item);
-                                setShowPaymentModal(true);
-                              }}
-                            >
-                              {payingEmployeeId === item.employee_id ? (
-                                'Membayar...'
-                              ) : (
-                                <>
-                                  <i className="fas fa-check me-1"></i>
-                                  Bayar
-                                </>
-                              )}
-                            </button>
-                          )}
-                        </td>
                       </tr>
                     ))
                   )}
@@ -567,67 +510,6 @@ const handleDownloadExcel = () => {
           </div>
         </>
       )}
-
-      {showPaymentModal && (
-        <div
-          style={{
-            position: "fixed",
-            top: 0,
-            left: 0,
-            width: "100%",
-            height: "100%",
-            background: "rgba(0,0,0,0.5)",
-            display: "flex",
-            justifyContent: "center",
-            alignItems: "center",
-            zIndex: 9999
-          }}
-        >
-          <div
-            style={{
-              background: "#fff",
-              borderRadius: "10px",
-              width: "420px",
-              padding: "25px",
-              boxShadow: "0 10px 30px rgba(0,0,0,0.3)"
-            }}
-          >
-            <h4 className="mb-3">
-              <i className="fas fa-exclamation-triangle text-warning me-2"></i>
-              Konfirmasi Pembayaran
-            </h4>
-
-            <p>
-              Pembayaran gaji hanya dapat dilakukan <strong>satu kali</strong>.
-            </p>
-
-            <p>
-              Setelah pembayaran berhasil, tombol <strong>Bayar</strong> tidak dapat
-              digunakan kembali.
-            </p>
-
-            <div className="d-flex justify-content-end gap-2 mt-4">
-              <button
-                className="btn btn-secondary"
-                onClick={() => setShowPaymentModal(false)}
-              >
-                Batal
-              </button>
-
-              <button
-                className="btn btn-primary"
-                onClick={() => {
-                  setShowPaymentModal(false);
-                  handlePayEmployee(selectedPayroll.employee_id);
-                }}
-              >
-                Ya, Bayar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      
     </div>
   );
 };

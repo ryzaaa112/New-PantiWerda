@@ -925,6 +925,94 @@ async function createTables() {
   }
 }
 
+async function processAutomaticPayroll() {
+  try {
+    const today = new Date();
+
+    // Ambil tanggal lokal
+    const currentDay = today.getDate();
+    const currentMonth = today.getMonth() + 1;
+    const currentYear = today.getFullYear();
+
+    // Format YYYY-MM
+    const currentMonthStr =
+      `${currentYear}-${String(currentMonth).padStart(2, '0')}`;
+
+    // ==========================================
+    // 1. BAYAR HARIAN PERIODE 1
+    //    Dibayar tanggal 16
+    // ==========================================
+    if (currentDay === 16) {
+      const previousMonth = currentMonthStr;
+
+      await db.run(`
+        UPDATE employee_payrolls
+        SET status = 'Sudah Dibayar',
+            paid_at = CURRENT_TIMESTAMP,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE payroll_month = ?
+        AND payroll_month LIKE '%-P1'
+        AND status = 'Belum Dibayar'
+      `, [`${previousMonth}-P1`]);
+
+      console.log(
+        `✅ Payroll Harian P1 ${previousMonth} otomatis dibayar`
+      );
+    }
+
+    // ==========================================
+    // 2. BAYAR P2 + BULANAN
+    //    Dibayar tanggal 1 bulan berjalan
+    // ==========================================
+    if (currentDay === 1) {
+
+      // Cari bulan sebelumnya
+      const previousDate = new Date(
+        currentYear,
+        currentMonth - 2,
+        1
+      );
+
+      const previousYear = previousDate.getFullYear();
+      const previousMonthNumber = previousDate.getMonth() + 1;
+
+      const previousMonth =
+        `${previousYear}-${String(previousMonthNumber).padStart(2, '0')}`;
+
+      // --------------------------
+      // Harian P2
+      // --------------------------
+      await db.run(`
+        UPDATE employee_payrolls
+        SET status = 'Sudah Dibayar',
+            paid_at = CURRENT_TIMESTAMP,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE payroll_month = ?
+        AND status = 'Belum Dibayar'
+      `, [`${previousMonth}-P2`]);
+
+      // --------------------------
+      // Bulanan
+      // --------------------------
+      await db.run(`
+        UPDATE employee_payrolls
+        SET status = 'Sudah Dibayar',
+            paid_at = CURRENT_TIMESTAMP,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE payroll_month = ?
+        AND status = 'Belum Dibayar'
+      `, [previousMonth]);
+
+      console.log(
+        `✅ Payroll P2 dan Bulanan ${previousMonth} otomatis dibayar`
+      );
+    }
+
+  } catch (error) {
+    console.error('❌ Error automatic payroll:', error);
+  }
+}
+
 async function insertDefaultData() {
   try {
     console.log('📥 Inserting default data...');
@@ -2678,7 +2766,12 @@ app.post('/api/employees', async (req, res) => {
       salary,
       salary_type,
       additional_variable,
-      bpjs
+      bpjs,
+      ktp_number,
+      email,
+      bank_account_number,
+      bank_account_name,
+      bank_name
     } = req.body;
 
     const result = await db.run(`
@@ -2693,9 +2786,14 @@ app.post('/api/employees', async (req, res) => {
         salary,
         salary_type,
         additional_variable,
-        bpjs
+        bpjs,
+        ktp_number,
+        email,
+        bank_account_number,
+        bank_account_name,
+        bank_name
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       name,
       gender,
@@ -2707,7 +2805,12 @@ app.post('/api/employees', async (req, res) => {
       salary,
       salary_type,
       additional_variable,
-      bpjs
+      bpjs,
+      ktp_number || null,
+      email || null,
+      bank_account_number || null,
+      bank_account_name || null,
+      bank_name || null
     ]);
 
     res.status(201).json({
@@ -2737,7 +2840,12 @@ app.put('/api/employees/:id', async (req, res) => {
       salary,
       salary_type,
       additional_variable,
-      bpjs
+      bpjs,
+      ktp_number,
+      email,
+      bank_account_number,
+      bank_account_name,
+      bank_name
     } = req.body;
 
     const result = await db.run(`
@@ -2750,7 +2858,12 @@ app.put('/api/employees/:id', async (req, res) => {
         salary = ?,
         salary_type = ?,
         additional_variable = ?,
-        bpjs = ?
+        bpjs = ?,
+        ktp_number = ?,
+        email = ?,
+        bank_account_number = ?,
+        bank_account_name = ?,
+        bank_name = ?
     WHERE id = ?
     `,[
         religion,
@@ -2761,6 +2874,11 @@ app.put('/api/employees/:id', async (req, res) => {
         salary_type,
         additional_variable,
         bpjs,
+         ktp_number || null,
+        email || null,
+        bank_account_number || null,
+        bank_account_name || null,
+        bank_name || null,
         id
     ]);
 
@@ -2875,10 +2993,14 @@ const getAttendancePayrollInfo = async (employeeId, baseMonth, period, salaryTyp
 
 app.get('/api/employee-payrolls', async (req, res) => {
   try {
-    const payrollMonth = req.query.month || `${new Date().toISOString().slice(0, 7)}`;
+    const payrollMonth =
+      req.query.month || `${new Date().toISOString().slice(0, 7)}`;
+
     const salaryType = req.query.salaryType;
+
     const hasPeriod = payrollMonth.includes('-P');
     const isPeriod1 = payrollMonth.endsWith('-P1');
+
     const baseMonth = hasPeriod
       ? payrollMonth.split('-P')[0]
       : payrollMonth;
@@ -2898,10 +3020,38 @@ app.get('/api/employee-payrolls', async (req, res) => {
     `);
 
     const payrolls = [];
+
     const [year, month] = baseMonth.split('-').map(Number);
 
+    /*
+     * =====================================================
+     * CEK TANGGAL PEMBAYARAN
+     * =====================================================
+     *
+     * Harian:
+     * P1 = tanggal 1-15
+     *     otomatis dibayar mulai tanggal 16
+     *
+     * P2 = tanggal 16-akhir bulan
+     *     otomatis dibayar mulai tanggal 1 bulan berikutnya
+     *
+     * Bulanan:
+     *     otomatis dibayar mulai tanggal 1 bulan berikutnya
+     */
+
+    const today = new Date();
+
+    let payrollPeriodEnded = false;
+
     for (const employee of employees) {
+
       const isDaily = isDailyEmployee(employee.salary_type);
+
+      /*
+       * =====================================================
+       * FILTER TIPE KARYAWAN
+       * =====================================================
+       */
 
       if (salaryType === 'Harian' && !isDaily) {
         continue;
@@ -2911,75 +3061,220 @@ app.get('/api/employee-payrolls', async (req, res) => {
         continue;
       }
 
-      const savedPayroll = await db.get(`
+      /*
+       * =====================================================
+       * PAYROLL YANG SUDAH TERSIMPAN
+       * =====================================================
+       */
+
+      let savedPayroll = await db.get(`
         SELECT *
         FROM employee_payrolls
         WHERE employee_id = ?
         AND payroll_month = ?
-      `, [employee.id, payrollMonth]);
+      `, [
+        employee.id,
+        payrollMonth
+      ]);
+
+      /*
+       * =====================================================
+       * DATA PINJAMAN
+       * =====================================================
+       */
 
       const currentLoanInstallment = await db.get(`
         SELECT eli.*
         FROM employee_loan_installments eli
-        JOIN employee_loans el ON eli.loan_id = el.id
+        JOIN employee_loans el
+          ON eli.loan_id = el.id
         WHERE eli.employee_id = ?
         AND eli.month = ?
         AND eli.year = ?
         AND el.status = 'Aktif'
         LIMIT 1
-      `, [employee.id, month, year]);
-
-      const salaryRate = parseMoneyValue(employee.salary);
-      const additionalVariable = parseMoneyValue(employee.additional_variable);
-      
-      // Karyawan Harian otomatis BPJS dan Pinjamannya = 0
-      const bpjsDeduction = isDaily ? 0 : parseMoneyValue(employee.bpjs);
-      const loanDeduction = isDaily ? 0 : (
-        currentLoanInstallment && currentLoanInstallment.status !== 'SUDAH BAYAR'
-          ? parseMoneyValue(currentLoanInstallment.bill_amount)
-          : 0
-      );
-
-      const attendanceInfo = await getAttendancePayrollInfo(
+      `, [
         employee.id,
-        baseMonth,
-        periodNumber,
-        employee.salary_type
-      );
+        month,
+        year
+      ]);
 
-      const paidDays = attendanceInfo.paid_days;
-      const unpaidDays = attendanceInfo.unpaid_days;
-      const attendanceDeduction = attendanceInfo.attendance_deduction;
+      /*
+       * =====================================================
+       * PERHITUNGAN GAJI
+       * =====================================================
+       */
 
-      const baseSalary = isDaily ? (salaryRate * paidDays) : salaryRate;
-      const totalSalary = baseSalary + additionalVariable - bpjsDeduction - loanDeduction - attendanceDeduction;
+      const salaryRate =
+        parseMoneyValue(employee.salary);
+
+      const additionalVariableRate =
+        parseMoneyValue(employee.additional_variable);
+
+      // BPJS berlaku untuk Harian maupun Bulanan
+      const bpjsDeduction =
+        parseMoneyValue(employee.bpjs);
+
+      // Pinjaman hanya untuk karyawan Bulanan
+      const loanDeduction = isDaily
+        ? 0
+        : (
+            currentLoanInstallment &&
+            currentLoanInstallment.status !== 'SUDAH BAYAR'
+              ? parseMoneyValue(
+                  currentLoanInstallment.bill_amount
+                )
+              : 0
+          );
+
+      /*
+       * =====================================================
+       * ABSENSI
+       * =====================================================
+       */
+
+      const attendanceInfo =
+        await getAttendancePayrollInfo(
+          employee.id,
+          baseMonth,
+          periodNumber,
+          employee.salary_type
+        );
+
+      const paidDays =
+        attendanceInfo.paid_days;
+
+      const unpaidDays =
+        attendanceInfo.unpaid_days;
+
+      const attendanceDeduction =
+        attendanceInfo.attendance_deduction;
+
+      /*
+       * =====================================================
+       * GAJI POKOK
+       * =====================================================
+       */
+
+      const baseSalary = isDaily
+        ? salaryRate * paidDays
+        : salaryRate;
+
+      /*
+       * =====================================================
+       * VARIABEL TAMBAHAN
+       *
+       * Harian:
+       * nominal variabel × jumlah hari dibayar
+       *
+       * Bulanan:
+       * nominal variabel tetap per bulan
+       * =====================================================
+       */
+
+      const additionalVariable = isDaily
+        ? additionalVariableRate * paidDays
+        : additionalVariableRate;
+
+      /*
+       * =====================================================
+       * TOTAL GAJI
+       * =====================================================
+       */
+
+      const totalSalary =
+        baseSalary +
+        additionalVariable -
+        bpjsDeduction -
+        loanDeduction -
+        attendanceDeduction;
+
+      /*
+       * =====================================================
+       * AUTO PAYMENT
+       * =====================================================
+       *
+       * Kalau periode sudah selesai dan payroll belum
+       * tersimpan, otomatis simpan sebagai Sudah Dibayar.
+       */
+
+
+      /*
+       * =====================================================
+       * DATA YANG DIKIRIM KE FRONTEND
+       * =====================================================
+       */
 
       payrolls.push({
         employee_id: employee.id,
         employee_name: employee.name,
         position: employee.position,
         salary_type: employee.salary_type,
-        base_salary: savedPayroll ? savedPayroll.base_salary : baseSalary,
-        additional_variable: savedPayroll ? savedPayroll.additional_variable : additionalVariable,
-        bpjs_deduction: savedPayroll ? savedPayroll.bpjs_deduction : bpjsDeduction,
-        loan_deduction: savedPayroll ? savedPayroll.loan_deduction : loanDeduction,
-        attendance_deduction: savedPayroll ? savedPayroll.attendance_deduction : attendanceDeduction,
+
+        base_salary: savedPayroll
+          ? savedPayroll.base_salary
+          : baseSalary,
+
+        additional_variable: savedPayroll
+          ? savedPayroll.additional_variable
+          : additionalVariable,
+
+        bpjs_deduction: savedPayroll
+          ? savedPayroll.bpjs_deduction
+          : bpjsDeduction,
+
+        loan_deduction: savedPayroll
+          ? savedPayroll.loan_deduction
+          : loanDeduction,
+
+        attendance_deduction: savedPayroll
+          ? savedPayroll.attendance_deduction
+          : attendanceDeduction,
+
         paid_days: paidDays,
+
         unpaid_days: unpaidDays,
-        total_salary: savedPayroll ? savedPayroll.total_salary : totalSalary,
-        status: savedPayroll ? savedPayroll.status : 'Belum Dibayar',
-        paid_at: savedPayroll ? savedPayroll.paid_at : null
+
+        total_salary: savedPayroll
+          ? savedPayroll.total_salary
+          : totalSalary,
+
+        status: savedPayroll
+          ? savedPayroll.status
+          : 'Belum Dibayar',
+
+        paid_at: savedPayroll
+          ? savedPayroll.paid_at
+          : null
       });
     }
 
+    /*
+     * =====================================================
+     * SUMMARY
+     * =====================================================
+     */
+
     const summary = payrolls.reduce(
       (acc, item) => {
-        acc.total_base_salary += item.base_salary;
-        acc.total_additional_variable += item.additional_variable;
-        acc.total_bpjs_deduction += item.bpjs_deduction;
-        acc.total_loan_deduction += item.loan_deduction;
-        acc.total_attendance_deduction += item.attendance_deduction;
-        acc.total_salary += item.total_salary;
+
+        acc.total_base_salary +=
+          Number(item.base_salary) || 0;
+
+        acc.total_additional_variable +=
+          Number(item.additional_variable) || 0;
+
+        acc.total_bpjs_deduction +=
+          Number(item.bpjs_deduction) || 0;
+
+        acc.total_loan_deduction +=
+          Number(item.loan_deduction) || 0;
+
+        acc.total_attendance_deduction +=
+          Number(item.attendance_deduction) || 0;
+
+        acc.total_salary +=
+          Number(item.total_salary) || 0;
 
         if (item.status === 'Sudah Dibayar') {
           acc.total_paid += 1;
@@ -3006,190 +3301,16 @@ app.get('/api/employee-payrolls', async (req, res) => {
       summary,
       payrolls
     });
+
   } catch (error) {
-    console.error('Error fetching employee payrolls:', error);
+
+    console.error(
+      'Error fetching employee payrolls:',
+      error
+    );
+
     res.status(500).json({
       error: 'Gagal memuat rekap gaji karyawan'
-    });
-  }
-});
-
-// PAY ONE EMPLOYEE SALARY
-app.post('/api/employee-payrolls/pay', async (req, res) => {
-  try {
-    const { employee_id, payroll_month } = req.body;
-
-    if (!employee_id || !payroll_month) {
-      return res.status(400).json({
-        error: 'employee_id dan payroll_month wajib diisi'
-      });
-    }
-    // Deteksi baseMonth dan period dari payroll_month (misal: '2026-06-P1')
-    const isPeriod1 = payroll_month.endsWith('-P1');
-    const baseMonth = payroll_month.split('-P')[0];
-    const periodNumber = isPeriod1 ? 1 : 2;
-
-    if (!isValidMonth(baseMonth)) {
-      return res.status(400).json({
-        error: 'Format bulan harus YYYY-MM, contoh: 2026-01'
-      });
-    }
-
-    const employee = await db.get(`
-      SELECT *
-      FROM employees
-      WHERE id = ?
-    `, [employee_id]);
-
-    if (!employee) {
-      return res.status(404).json({
-        error: 'Karyawan tidak ditemukan'
-      });
-    }
-
-    const isDaily = isDailyEmployee(employee.salary_type);
-
-    if (!isDaily && isPeriod1) {
-      return res.status(400).json({
-        error: 'Karyawan bulanan hanya dapat dibayar pada Periode 2'
-      });
-    }
-
-    const [year, month] = payroll_month.split('-').map(Number);
-
-    const currentLoanInstallment = await db.get(`
-      SELECT eli.*
-      FROM employee_loan_installments eli
-      JOIN employee_loans el ON eli.loan_id = el.id
-      WHERE eli.employee_id = ?
-      AND eli.month = ?
-      AND eli.year = ?
-      AND el.status = 'Aktif'
-      LIMIT 1
-    `, [employee_id, month, year]);
-
-    const salaryRate = parseMoneyValue(employee.salary);
-    const additionalVariable = parseMoneyValue(employee.additional_variable);
-    const bpjsDeduction = isDaily ? 0 : parseMoneyValue(employee.bpjs);
-
-    const attendanceInfo = await getAttendancePayrollInfo(
-      employee_id,
-      baseMonth,
-      periodNumber,
-      employee.salary_type
-    );
-
-    const attendanceDeduction = attendanceInfo.attendance_deduction;
-
-    const baseSalary = isDaily ? (salaryRate * attendanceInfo.paid_days) : salaryRate;
-
-    const loanDeduction = isDaily ? 0 : (
-      currentLoanInstallment && currentLoanInstallment.status !== 'SUDAH BAYAR'
-        ? parseMoneyValue(currentLoanInstallment.bill_amount)
-        : 0
-    );
-
-    const totalSalary =
-      baseSalary + additionalVariable - bpjsDeduction - loanDeduction - attendanceDeduction;
-
-    await db.run('BEGIN TRANSACTION');
-
-    try {
-      await db.run(`
-        INSERT INTO employee_payrolls (
-          employee_id,
-          payroll_month,
-          base_salary,
-          additional_variable,
-          bpjs_deduction,
-          loan_deduction,
-          attendance_deduction,
-          total_salary,
-          status,
-          paid_at
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Sudah Dibayar', CURRENT_TIMESTAMP)
-        ON CONFLICT(employee_id, payroll_month) DO UPDATE SET
-          base_salary = excluded.base_salary,
-          additional_variable = excluded.additional_variable,
-          bpjs_deduction = excluded.bpjs_deduction,
-          loan_deduction = excluded.loan_deduction,
-          attendance_deduction = excluded.attendance_deduction,
-          total_salary = excluded.total_salary,
-          status = 'Sudah Dibayar',
-          paid_at = CURRENT_TIMESTAMP,
-          updated_at = CURRENT_TIMESTAMP
-      `, [
-        employee_id,
-        payroll_month,
-        baseSalary,
-        additionalVariable,
-        bpjsDeduction,
-        loanDeduction,
-        attendanceDeduction,
-        totalSalary
-      ]);
-
-      if (currentLoanInstallment && currentLoanInstallment.status !== 'SUDAH BAYAR') {
-        await db.run(`
-          UPDATE employee_loan_installments
-          SET status = 'SUDAH BAYAR',
-              paid_at = CURRENT_TIMESTAMP
-          WHERE id = ?
-        `, [currentLoanInstallment.id]);
-
-        const loan = await db.get(`
-          SELECT *
-          FROM employee_loans
-          WHERE id = ?
-        `, [currentLoanInstallment.loan_id]);
-
-        if (loan) {
-          const newRemainingAmount = Math.max(
-            0,
-            parseMoneyValue(loan.remaining_amount) - parseMoneyValue(currentLoanInstallment.bill_amount)
-          );
-
-          await db.run(`
-            UPDATE employee_loans
-            SET remaining_amount = ?,
-                status = ?
-            WHERE id = ?
-          `, [
-            newRemainingAmount,
-            newRemainingAmount <= 0 ? 'Lunas' : 'Aktif',
-            loan.id
-          ]);
-        }
-      }
-
-      await db.run('COMMIT');
-
-      res.json({
-        success: true,
-        message: 'Gaji karyawan berhasil dibayar',
-        data: {
-          employee_id,
-          payroll_month,
-          base_salary: baseSalary,
-          additional_variable: additionalVariable,
-          bpjs_deduction: bpjsDeduction,
-          loan_deduction: loanDeduction,
-          attendance_deduction: attendanceDeduction,
-          paid_days: attendanceInfo.paid_days,
-          unpaid_days: attendanceInfo.unpaid_days,
-          total_salary: totalSalary,
-          status: 'Sudah Dibayar'
-        }
-      });
-    } catch (error) {
-      await db.run('ROLLBACK');
-      throw error;
-    }
-  } catch (error) {
-    console.error('Error paying employee payroll:', error);
-    res.status(500).json({
-      error: 'Gagal membayar gaji karyawan'
     });
   }
 });
@@ -3482,11 +3603,16 @@ app.put('/api/employee-loan-installments/:id/status', async (req, res) => {
 async function startServer() {
   try {
     await initializeDatabase();
+    await processAutomaticPayroll();
     app.listen(PORT, () => {
       console.log(`🚀 Server running on http://localhost:${PORT}`);
       console.log(`📁 Database: nursing_home.db`);
       console.log(`📊 API endpoints available at http://localhost:${PORT}/api/`);
       console.log(`🔑 Default login: admin / admin123`);
+
+      setInterval(() => {
+        processAutomaticPayroll();
+      }, 60 * 60 * 1000);
     });
   } catch (error) {
     console.error('Failed to start server:', error);

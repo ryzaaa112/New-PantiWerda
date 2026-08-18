@@ -19,6 +19,11 @@ const InputEmployee = ({ navigateTo }) => {
     religion: '',
     phone: '',
     address: '',
+    ktp_number: '',
+    email: '',
+    bank_account_number: '',
+    bank_account_name: '',
+    bank_name: '',
 
     // DATA PEKERJAAN
     position: '',
@@ -345,6 +350,36 @@ const InputEmployee = ({ navigateTo }) => {
 
             </div>
 
+            {/* NOMOR KTP */}
+            <div className="col-md-6">
+              <label className="form-label">Nomor KTP</label>
+              <input
+                type="text"
+                className="form-control"
+                name="ktp_number"
+                value={formData.ktp_number}
+                onChange={handleChange}
+                placeholder="Masukkan 16 digit NIK/KTP"
+                maxLength="16"
+                inputMode="numeric"
+                disabled={isLoading}
+              />
+            </div>
+
+            {/* EMAIL */}
+            <div className="col-md-6">
+              <label className="form-label">Alamat Email</label>
+              <input
+                type="email"
+                className="form-control"
+                name="email"
+                value={formData.email}
+                onChange={handleChange}
+                placeholder="contoh@email.com"
+                disabled={isLoading}
+              />
+            </div>
+
             {/* ALAMAT */}
             <div className="col-12">
 
@@ -362,6 +397,47 @@ const InputEmployee = ({ navigateTo }) => {
                 disabled={isLoading}
               ></textarea>
 
+            </div>
+
+            {/* DATA REKENING */}
+            <div className="col-md-4">
+              <label className="form-label">Nomor Rekening</label>
+              <input
+                type="text"
+                className="form-control"
+                name="bank_account_number"
+                value={formData.bank_account_number}
+                onChange={handleChange}
+                placeholder="Nomor rekening"
+                inputMode="numeric"
+                disabled={isLoading}
+              />
+            </div>
+
+            <div className="col-md-4">
+              <label className="form-label">Atas Nama Rekening</label>
+              <input
+                type="text"
+                className="form-control"
+                name="bank_account_name"
+                value={formData.bank_account_name}
+                onChange={handleChange}
+                placeholder="Nama pemilik rekening"
+                disabled={isLoading}
+              />
+            </div>
+
+            <div className="col-md-4">
+              <label className="form-label">Nama Bank</label>
+              <input
+                type="text"
+                className="form-control"
+                name="bank_name"
+                value={formData.bank_name}
+                onChange={handleChange}
+                placeholder="Contoh: BCA"
+                disabled={isLoading}
+              />
             </div>
 
           </div>
