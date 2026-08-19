@@ -70,6 +70,10 @@ const Attendance = ({ navigateTo }) => {
   const [savingCell, setSavingCell] = useState(null);
   const [page, setPage] = useState(1);
   const [attendanceMode, setAttendanceMode] = useState("Harian");
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [adminPassword, setAdminPassword] = useState('');
+  const [pendingAttendance, setPendingAttendance] = useState(null);
+  const [selectedOverrideStatus, setSelectedOverrideStatus] = useState('');
   const filteredEmployees = useMemo(() => {
   return employees.filter((employee) => {
     if (attendanceMode === "Harian") {
@@ -148,44 +152,104 @@ const Attendance = ({ navigateTo }) => {
     return STATUS_ORDER[(currentIndex + 1) % STATUS_ORDER.length];
   };
 
-  const updateAttendanceCell = async (employeeId, day, currentStatus) => {
-    const nextStatus = getNextStatus(currentStatus);
-    const attendanceDate = `${month}-${pad2(day)}`;
-    const today = new Date();
+const updateAttendanceCell = async (
+  employeeId,
+  day,
+  currentStatus,
+  overridePassword = null,
+  overrideStatus = null
+) => {
+  const nextStatus = overrideStatus || getNextStatus(currentStatus);
+  const attendanceDate = `${month}-${pad2(day)}`;
 
-today.setHours(0,0,0,0);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
 
-const selected = new Date(attendanceDate);
+  const selected = new Date(attendanceDate);
+  selected.setHours(0, 0, 0, 0);
 
-selected.setHours(0,0,0,0);
+  const diffDays = Math.floor(
+    (today - selected) / (1000 * 60 * 60 * 24)
+  );
 
-const diffDays = Math.floor(
-  (today - selected) / (1000*60*60*24)
-);
+  // Kalau sudah lewat H+2 dan belum melakukan override
+  if (diffDays > 2 && !overridePassword) {
+  setPendingAttendance({
+    employeeId,
+    day,
+    currentStatus
+  });
 
-if (diffDays > 2) {
-  alert("Absensi H+2 sudah terkunci.");
+  // Default pilihan mengikuti status saat ini
+  setSelectedOverrideStatus(currentStatus);
+
+  setAdminPassword('');
+  setShowPasswordModal(true);
+
   return;
 }
-    const cellKey = `${employeeId}-${day}`;
 
-    setSavingCell(cellKey);
+  const cellKey = `${employeeId}-${day}`;
 
-    try {
-      await attendanceAPI.save({
-        employee_id: employeeId,
-        attendance_date: attendanceDate,
-        status: nextStatus,
-      });
+  setSavingCell(cellKey);
 
-      await fetchAttendance();
-    } catch (error) {
-      console.error(error);
-      alert(error?.error || 'Gagal menyimpan absensi');
-    } finally {
-      setSavingCell(null);
-    }
-  };
+  try {
+    await attendanceAPI.save({
+  employee_id: employeeId,
+  attendance_date: attendanceDate,
+  status: nextStatus,
+  override_password: overridePassword
+});
+
+    await fetchAttendance();
+
+  } catch (error) {
+    console.error(error);
+
+    alert(
+      error?.error || 'Gagal menyimpan absensi'
+    );
+
+  } finally {
+    setSavingCell(null);
+  }
+};  
+  const handleAdminPasswordSubmit = async () => {
+  if (!adminPassword) {
+    alert('Masukkan password admin.');
+    return;
+  }
+
+  if (!pendingAttendance) {
+    setShowPasswordModal(false);
+    return;
+  }
+
+  if (!selectedOverrideStatus) {
+    alert('Pilih status absensi terlebih dahulu.');
+    return;
+  }
+
+  const {
+    employeeId,
+    day,
+    currentStatus
+  } = pendingAttendance;
+
+  setShowPasswordModal(false);
+
+  await updateAttendanceCell(
+    employeeId,
+    day,
+    currentStatus,
+    adminPassword,
+    selectedOverrideStatus
+  );
+
+  setPendingAttendance(null);
+  setAdminPassword('');
+  setSelectedOverrideStatus('');
+};
 
   const markAllPresent = async () => {
     const attendanceDate = `${month}-${pad2(selectedDay)}`;
@@ -550,9 +614,8 @@ if (diffDays > 2) {
                             cursor: locked ? "not-allowed" : "pointer",
                         }}
                             onClick={() => {
-                              if (locked) return;
-                              updateAttendanceCell(employee.id, day, currentStatus);
-                          }}
+  updateAttendanceCell(employee.id, day, currentStatus);
+}}
                             disabled={savingCell === cellKey}
                           >
                             {savingCell === cellKey ? '...' : currentStatus}
@@ -575,6 +638,107 @@ if (diffDays > 2) {
           </div>
         </div>
       )}
+      {showPasswordModal && (
+  <div
+    className="modal fade show d-block"
+    style={{
+      backgroundColor: 'rgba(0,0,0,0.5)'
+    }}
+  >
+    <div className="modal-dialog modal-dialog-centered">
+      <div className="modal-content">
+
+        <div className="modal-header">
+          <h5 className="modal-title">
+            Verifikasi Admin
+          </h5>
+
+          <button
+            type="button"
+            className="btn-close"
+            onClick={() => {
+              setShowPasswordModal(false);
+              setPendingAttendance(null);
+              setAdminPassword('');
+              setSelectedOverrideStatus('');
+            }}
+          />
+        </div>
+
+        <div className="modal-body">
+
+          <p className="text-muted mb-3">
+            Absensi ini sudah melewati batas H+2.
+            Masukkan password admin untuk melakukan koreksi.
+          </p>
+
+          <label className="form-label">
+            Password Admin
+          </label>
+
+          <input
+            type="password"
+            className="form-control"
+            value={adminPassword}
+            onChange={(e) =>
+              setAdminPassword(e.target.value)
+            }
+            placeholder="Masukkan password admin"
+            autoFocus
+          />
+          <div className="mt-3">
+  <label className="form-label">
+    Ubah Status Menjadi
+  </label>
+
+  <select
+    className="form-select"
+    value={selectedOverrideStatus}
+    onChange={(e) =>
+      setSelectedOverrideStatus(e.target.value)
+    }
+  >
+    {STATUS_LIST.map((status) => (
+      <option
+        key={status.code}
+        value={status.code}
+      >
+        {status.code} - {status.label}
+      </option>
+    ))}
+  </select>
+</div>
+        </div>
+
+        <div className="modal-footer">
+
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={() => {
+              setShowPasswordModal(false);
+              setPendingAttendance(null);
+              setAdminPassword('');
+              setSelectedOverrideStatus('');
+            }}
+          >
+            Batal
+          </button>
+
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={handleAdminPasswordSubmit}
+          >
+            Simpan Perubahan
+          </button>
+
+        </div>
+
+      </div>
+    </div>
+  </div>
+)}
     </div>
     
   );

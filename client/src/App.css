@@ -71,12 +71,38 @@
 
   /* Dashboard Menu Cards - BinusMaya Style */
   .menu-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-    gap: 25px;
-    margin-top: 30px;
-    justify-items: center;
-  }
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 25px;
+  margin-top: 30px;
+  align-items: stretch;
+}
+
+.menu-item {
+  width: 100%;
+  min-height: 245px;
+  height: 245px;
+
+  background: white;
+  border-radius: 12px;
+  padding: 30px 25px;
+
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.3s ease;
+
+  color: #333;
+  position: relative;
+  overflow: hidden;
+
+  border: 1px solid #eaeaea;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
 
   .menu-item {
     background: white;
@@ -91,7 +117,21 @@
     border: 1px solid #eaeaea;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
   }
+.menu-item h3 {
+  min-height: 50px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 10px;
+}
 
+.menu-item p {
+  min-height: 44px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  margin: 0;
+}
   .menu-item:hover {
     transform: translateY(-5px);
     border-color: #0056a6;

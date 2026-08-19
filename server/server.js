@@ -1997,29 +1997,71 @@ app.get('/api/employee-attendance', async (req, res) => {
 // Simpan absensi 1 cell
 app.post('/api/employee-attendance', async (req, res) => {
   try {
-    const { employee_id, attendance_date, status, notes, recorded_by } = req.body;
+    const {
+  employee_id,
+  attendance_date,
+  status,
+  notes,
+  recorded_by,
+  override_password
+} = req.body;
     // ===========================
 // LOCK H+2
 // ===========================
+// ===========================
+// LOCK H+2 + ADMIN OVERRIDE
+// ===========================
 const today = new Date();
-
 today.setHours(0, 0, 0, 0);
 
 const attDate = new Date(attendance_date);
-
 attDate.setHours(0, 0, 0, 0);
 
 const diffDays = Math.floor(
   (today - attDate) / (1000 * 60 * 60 * 24)
 );
 
-// kalau lebih dari 2 hari lalu -> lock
 if (diffDays > 2) {
-  return res.status(403).json({
-    error: 'Absensi lebih dari H+2 tidak dapat diubah.'
-  });
-}
 
+  // Tanggal sudah terkunci,
+  // jadi password admin wajib ada
+  if (!override_password) {
+    return res.status(403).json({
+      error: 'Absensi sudah terkunci. Password admin diperlukan.'
+    });
+  }
+
+  // Ambil akun admin
+  const adminUser = await db.get(
+    `
+    SELECT password_hash
+    FROM users
+    WHERE username = ?
+      AND role = 'admin'
+      AND is_active = 1
+    `,
+    ['admin']
+  );
+
+  if (!adminUser) {
+    return res.status(403).json({
+      error: 'Akun admin tidak ditemukan.'
+    });
+  }
+
+  // Cek password admin
+  const isValidAdminPassword = await bcrypt.compare(
+    override_password,
+    adminUser.password_hash
+  );
+
+  if (!isValidAdminPassword) {
+    return res.status(403).json({
+      error: 'Password admin salah.'
+    });
+  }
+}
+ 
     if (!employee_id || !isValidDateValue(attendance_date)) {
       return res.status(400).json({
         error: 'employee_id dan attendance_date wajib diisi',
