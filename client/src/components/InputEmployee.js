@@ -111,6 +111,39 @@ const InputEmployee = ({ navigateTo }) => {
     return '';
   };
 
+  const validateKtpNumber = (ktp_number) => {
+    if (!ktp_number) return 'Nomor KTP wajib diisi';
+    if (!/^\d+$/.test(ktp_number)) return 'Nomor KTP harus berupa angka';
+    if (ktp_number.length !== 16) {
+      return 'Nomor KTP harus tepat 16 digit';
+    }
+    return '';
+  };
+
+  const validateBankAccountNumber = (bank_account_number) => {
+    if (!bank_account_number) return 'Nomor rekening wajib diisi';
+    if (!/^\d+$/.test(bank_account_number)) {
+      return 'Nomor rekening harus berupa angka';
+    }
+    return '';
+  };
+
+  const validateBankAccountName = (bank_account_name) => {
+    if (!bank_account_name) return 'Atas nama rekening wajib diisi';
+    if (!/^[a-zA-Z\s]+$/.test(bank_account_name)) {
+      return 'Atas nama rekening hanya boleh berisi huruf dan spasi';
+    }
+    return '';
+  };
+
+  const validateBankName = (bank_name) => {
+    if (!bank_name) return 'Nama bank wajib diisi';
+    if (!/^[a-zA-Z\s]+$/.test(bank_name)) {
+      return 'Nama bank hanya boleh berisi huruf dan spasi';
+    }
+    return '';
+  };
+
   // ================= HANDLE CHANGE =================
 
   const handleChange = (e) => {
@@ -136,6 +169,14 @@ const InputEmployee = ({ navigateTo }) => {
       error = validateReligion(value);
     } else if (name === 'phone') {
       error = validatePhone(value);
+      } else if (name === 'ktp_number') {
+      error = validateKtpNumber(value);
+    } else if (name === 'bank_account_number') {
+      error = validateBankAccountNumber(value);
+    } else if (name === 'bank_account_name') {
+      error = validateBankAccountName(value);
+    } else if (name === 'bank_name') {
+      error = validateBankName(value);
     } else if (name === 'salary') {
       error = validateSalary(value);
     } else if (name === 'bpjs') {
@@ -166,6 +207,10 @@ const InputEmployee = ({ navigateTo }) => {
 
   const religionError = validateReligion(dataToSubmit.religion);
   const phoneError = validatePhone(dataToSubmit.phone);
+  const ktpError = validateKtpNumber(dataToSubmit.ktp_number);
+  const bankAccNoErr = validateBankAccountNumber(dataToSubmit.bank_account_number);
+  const bankAccNameErr = validateBankAccountName(dataToSubmit.bank_account_name);
+  const bankNameErr = validateBankName(dataToSubmit.bank_name);
   const salaryError = validateSalary(dataToSubmit.salary);
   // Hanya validasi BPJS jika bukan Harian
   const bpjsError = dataToSubmit.salary_type === 'Bulanan' ? validateBPJS(dataToSubmit.bpjs) : '';
@@ -174,6 +219,10 @@ const InputEmployee = ({ navigateTo }) => {
   const errors = {
     religion: religionError,
     phone: phoneError,
+    ktp_number: ktpError,
+    bank_account_number: bankAccNoErr,
+    bank_account_name: bankAccNameErr,
+    bank_name: bankNameErr,
     salary: salaryError,
     bpjs: bpjsError,
     additional_variable: additional_variableError
@@ -352,10 +401,10 @@ const InputEmployee = ({ navigateTo }) => {
 
             {/* NOMOR KTP */}
             <div className="col-md-6">
-              <label className="form-label">Nomor KTP</label>
+              <label className="form-label">Nomor KTP *</label>
               <input
                 type="text"
-                className="form-control"
+                className={`form-control ${employeeErrors.ktp_number ? 'is-invalid' : ''}`}
                 name="ktp_number"
                 value={formData.ktp_number}
                 onChange={handleChange}
@@ -364,8 +413,12 @@ const InputEmployee = ({ navigateTo }) => {
                 inputMode="numeric"
                 disabled={isLoading}
               />
+              {employeeErrors.ktp_number && (
+                <div className="invalid-feedback">{employeeErrors.ktp_number}</div>
+              )}
+              <small className="text-muted">Harus tepat 16 digit angka</small>
             </div>
-
+            
             {/* EMAIL */}
             <div className="col-md-6">
               <label className="form-label">Alamat Email</label>
@@ -401,10 +454,10 @@ const InputEmployee = ({ navigateTo }) => {
 
             {/* DATA REKENING */}
             <div className="col-md-4">
-              <label className="form-label">Nomor Rekening</label>
+              <label className="form-label">Nomor Rekening *</label>
               <input
                 type="text"
-                className="form-control"
+                className={`form-control ${employeeErrors.bank_account_number ? 'is-invalid' : ''}`}
                 name="bank_account_number"
                 value={formData.bank_account_number}
                 onChange={handleChange}
@@ -412,32 +465,41 @@ const InputEmployee = ({ navigateTo }) => {
                 inputMode="numeric"
                 disabled={isLoading}
               />
+              {employeeErrors.bank_account_number && (
+                <div className="invalid-feedback">{employeeErrors.bank_account_number}</div>
+              )}
             </div>
 
             <div className="col-md-4">
-              <label className="form-label">Atas Nama Rekening</label>
+              <label className="form-label">Atas Nama Rekening *</label>
               <input
                 type="text"
-                className="form-control"
+                className={`form-control ${employeeErrors.bank_account_name ? 'is-invalid' : ''}`}
                 name="bank_account_name"
                 value={formData.bank_account_name}
                 onChange={handleChange}
                 placeholder="Nama pemilik rekening"
                 disabled={isLoading}
               />
+              {employeeErrors.bank_account_name && (
+                <div className="invalid-feedback">{employeeErrors.bank_account_name}</div>
+              )}
             </div>
 
             <div className="col-md-4">
-              <label className="form-label">Nama Bank</label>
+              <label className="form-label">Nama Bank *</label>
               <input
                 type="text"
-                className="form-control"
+                className={`form-control ${employeeErrors.bank_name ? 'is-invalid' : ''}`}
                 name="bank_name"
                 value={formData.bank_name}
                 onChange={handleChange}
                 placeholder="Contoh: BCA"
                 disabled={isLoading}
               />
+              {employeeErrors.bank_name && (
+                <div className="invalid-feedback">{employeeErrors.bank_name}</div>
+              )}
             </div>
 
           </div>

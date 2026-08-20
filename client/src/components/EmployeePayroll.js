@@ -107,36 +107,46 @@ const EmployeePayroll = ({ navigateTo }) => {
 const handleDownloadExcel = () => {
   if (!payrollData || !payrollData.payrolls) return;
 
-  // 1. Siapkan data dengan format yang diinginkan (ditambahkan kolom Potongan Absensi)
-  const wsData = payrollData.payrolls.map(item => ({
-    "Nama": item.employee_name,
-    "Jabatan": item.position || '-',
-    "Tipe Gaji": item.salary_type || '-',
-    "Gaji Pokok": item.base_salary,
-    "Variabel tambahan": item.additional_variable,
-    "BPJS": item.bpjs_deduction,
-    "Pinjaman": item.loan_deduction,
-    "Potongan Absensi": item.attendance_deduction, // <--- TAMBAHKAN BARIS INI
-    "Total Dibayar": item.total_salary,
-    "Status": item.status
-  }));
+  // 1. Siapkan data dengan kondisi dinamis berdasarkan Tipe Gaji
+  const wsData = filteredPayrolls.map(item => {
+    const baseRow = {
+      "Nama": item.employee_name,
+      "Jabatan": item.position || '-',
+      "Tipe Gaji": item.salary_type || '-',
+      "Gaji Pokok": item.base_salary,
+      "Variabel tambahan": item.additional_variable,
+      "BPJS": item.bpjs_deduction,
+    };
+
+    // Jika Bulanan, tambahkan kolom Pinjaman di tengah
+    if (selectedSalaryType === 'Bulanan') {
+      baseRow["Pinjaman"] = item.loan_deduction;
+    }
+
+    // Lanjutkan sisa kolom berikutnya
+    baseRow["Potongan Absensi"] = item.attendance_deduction;
+    baseRow["Total Dibayar"] = item.total_salary;
+    baseRow["Status"] = item.status;
+
+    return baseRow;
+  });
 
   // 2. Buat Worksheet
   const ws = XLSX.utils.json_to_sheet(wsData);
 
-  // 3. Atur Lebar Kolom agar tidak terpotong (tambahkan satu item untuk kolom baru)
-  const colWidths = [
-    { wch: 20 }, { wch: 15 }, { wch: 12 }, { wch: 15 }, 
-    { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 18 }, // <--- Lebar untuk Potongan Absensi
-    { wch: 15 }, { wch: 15 }
-  ];
+  // 3. Atur Lebar Kolom secara dinamis
+  const colWidths = selectedSalaryType === 'Bulanan' 
+    ? [{ wch: 20 }, { wch: 15 }, { wch: 12 }, { wch: 15 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 18 }, { wch: 15 }, { wch: 15 }]
+    : [{ wch: 20 }, { wch: 15 }, { wch: 12 }, { wch: 15 }, { wch: 12 }, { wch: 12 }, { wch: 18 }, { wch: 15 }, { wch: 15 }];
+  
   ws['!cols'] = colWidths;
 
-  // 4. Beri Warna berdasarkan Status
-  // Perhatikan index kolom berubah dari 8 menjadi 9 karena ada penambahan kolom baru
+  // 4. Beri Warna berdasarkan Status (Kolom status berada di indeks terakhir)
+  const statusColumnIndex = selectedSalaryType === 'Bulanan' ? 9 : 8;
   const range = XLSX.utils.decode_range(ws['!ref']);
+  
   for (let R = range.s.r + 1; R <= range.e.r; ++R) {
-    const statusCellAddress = XLSX.utils.encode_cell({ c: 9, r: R }); // <--- Ubah menjadi c: 9
+    const statusCellAddress = XLSX.utils.encode_cell({ c: statusColumnIndex, r: R });
     const cell = ws[statusCellAddress];
     
     if (cell && cell.v === 'Sudah Dibayar') {
@@ -149,7 +159,7 @@ const handleDownloadExcel = () => {
   // 5. Buat Workbook dan download
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Rekap Gaji");
-  XLSX.writeFile(wb, `Rekap_Gaji_${payrollMonth}.xlsx`);
+  XLSX.writeFile(wb, `Rekap_Gaji_${selectedSalaryType}_${payrollMonth}.xlsx`);
 };
 
 //  TAMBAHKAN LOGIKA FILTER INI
