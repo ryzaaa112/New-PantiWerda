@@ -138,52 +138,6 @@ app.get('/api/dashboard-stats', async (req, res) => {
   }
 });
 
-// RESIDENTS ENDPOINTS
-// GET all residents
-app.get('/api/residents', async (req, res) => {
-  try {
-    console.log('GET /api/residents - Fetching all residents');
-
-    const { search, status, type } = req.query;
-
-    let query = `
-      SELECT r.*, 
-             rm.room_name,
-             rm.room_type,
-             rm.status as room_status
-      FROM residents r
-      LEFT JOIN rooms rm ON r.room_id = rm.id
-      WHERE 1=1
-    `;
-    const params = [];
-
-    if (status) {
-      query += ' AND r.status = ?';
-      params.push(status);
-    }
-
-    if (type) {
-      query += ' AND r.gender = ?';
-      params.push(type === 'Opa' ? 'male' : 'female');
-    }
-
-    if (search) {
-      query += ' AND (r.name LIKE ? OR r.resident_id LIKE ?)';
-      params.push(`%${search}%`, `%${search}%`);
-    }
-
-    query += ' ORDER BY r.name';
-
-    const residents = await db.all(query, params);
-    console.log(`Found ${residents.length} residents`);
-
-    res.json(residents);
-  } catch (error) {
-    console.error('Error fetching residents:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
 // ================== TRANSACTIONS API ==================
 
 // GET transactions with filtering
@@ -211,8 +165,12 @@ app.get('/api/transactions', async (req, res) => {
     }
 
     if (category_name) {
-      query += ' AND dc.name = ?';
-      params.push(category_name);
+      if (category_name === '__custom__') {
+        query += ' AND dc.is_custom = 1';
+      } else {
+        query += ' AND dc.name = ?';
+        params.push(category_name);
+      }
     }
 
     query += ' ORDER BY t.transaction_date DESC';
@@ -248,8 +206,15 @@ app.post('/api/transactions', uploadTransaction.single('attachment'), async (req
       } else {
         // Create new category if it doesn't exist
         const newCategory = await db.run(
-          'INSERT INTO donation_categories (name, type, description) VALUES (?, ?, ?)',
-          [category_name, 'income', `Kategori baru: ${category_name}`]
+          `INSERT INTO donation_categories 
+          (name, type, description, is_custom) 
+          VALUES (?, ?, ?, ?)`,
+          [
+            category_name,
+            'income',
+            `Kategori baru: ${category_name}`,
+            1
+          ]
         );
         categoryId = newCategory.lastID;
       }
@@ -302,6 +267,53 @@ app.post('/api/transactions', uploadTransaction.single('attachment'), async (req
     });
   } catch (error) {
     console.error('Error creating transaction:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+
+// RESIDENTS ENDPOINTS
+// GET all residents
+app.get('/api/residents', async (req, res) => {
+  try {
+    console.log('GET /api/residents - Fetching all residents');
+
+    const { search, status, type } = req.query;
+
+    let query = `
+      SELECT r.*, 
+             rm.room_name,
+             rm.room_type,
+             rm.status as room_status
+      FROM residents r
+      LEFT JOIN rooms rm ON r.room_id = rm.id
+      WHERE 1=1
+    `;
+    const params = [];
+
+    if (status) {
+      query += ' AND r.status = ?';
+      params.push(status);
+    }
+
+    if (type) {
+      query += ' AND r.gender = ?';
+      params.push(type === 'Opa' ? 'male' : 'female');
+    }
+
+    if (search) {
+      query += ' AND (r.name LIKE ? OR r.resident_id LIKE ?)';
+      params.push(`%${search}%`, `%${search}%`);
+    }
+
+    query += ' ORDER BY r.name';
+
+    const residents = await db.all(query, params);
+    console.log(`Found ${residents.length} residents`);
+
+    res.json(residents);
+  } catch (error) {
+    console.error('Error fetching residents:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -665,6 +677,11 @@ async function createTables() {
         salary_type TEXT DEFAULT 'Bulanan',
         additional_variable TEXT,
         bpjs TEXT,
+        ktp_number TEXT,
+        email TEXT,
+        bank_account_number TEXT,
+        bank_account_name TEXT,
+        bank_name TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
@@ -823,7 +840,39 @@ async function createTables() {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL UNIQUE,
         type TEXT NOT NULL CHECK (type IN ('income', 'expense')),
-        description TEXT
+        description TEXT,
+        is_custom INTEGER DEFAULT 0
+      )
+    `);
+
+    await db.run(`
+      CREATE TABLE IF NOT EXISTS donations (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        donation_id TEXT UNIQUE NOT NULL,
+        donor_name TEXT NOT NULL,
+        donation_date TEXT NOT NULL,
+        payment_method TEXT CHECK (
+          payment_method IN ('cash', 'transfer', 'check', 'other')
+        ),
+        reference_number TEXT,
+        notes TEXT,
+        attachment_path TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await db.run(`
+      CREATE TABLE IF NOT EXISTS donation_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        donation_id INTEGER NOT NULL,
+        category_id INTEGER NOT NULL,
+        item_name TEXT,
+        quantity DECIMAL(15,2),
+        unit TEXT,
+        amount DECIMAL(15,2) DEFAULT 0,
+        description TEXT,
+        FOREIGN KEY (donation_id) REFERENCES donations(id),
+        FOREIGN KEY (category_id) REFERENCES donation_categories(id)
       )
     `);
 
@@ -1039,22 +1088,23 @@ async function insertDefaultData() {
 
     // Insert default donation categories
     const donationCategories = [
-      ['Uang', 'income', 'Donasi dalam bentuk uang'],
-      ['Sembako', 'income', 'Donasi dalam bentuk sembako'],
-      ['Makanan', 'income', 'Donasi dalam bentuk makanan'],
-      ['Minuman', 'income', 'Donasi dalam bentuk minuman'],
-      ['Obat-obatan', 'income', 'Donasi dalam bentuk obat-obatan'],
-      ['Peralatan', 'income', 'Donasi dalam bentuk peralatan'],
-      ['Lainnya', 'income', 'Kategori donasi lainnya']
+      ['Uang', 'income', 'Donasi dalam bentuk uang', 0],
+      ['Sembako', 'income', 'Donasi dalam bentuk sembako', 0],
+      ['Makanan', 'income', 'Donasi dalam bentuk makanan', 0],
+      ['Minuman', 'income', 'Donasi dalam bentuk minuman', 0],
+      ['Obat-obatan', 'income', 'Donasi dalam bentuk obat-obatan', 0],
+      ['Peralatan', 'income', 'Donasi dalam bentuk peralatan', 0],
+      ['Lainnya', 'income', 'Kategori donasi lainnya', 1]
     ];
 
-    // Clear and insert new categories
     await db.run('DELETE FROM donation_categories');
 
-    for (const [name, type, description] of donationCategories) {
+    for (const [name, type, description, isCustom] of donationCategories) {
       await db.run(
-        'INSERT INTO donation_categories (name, type, description) VALUES (?, ?, ?)',
-        [name, type, description]
+        `INSERT INTO donation_categories 
+        (name, type, description, is_custom) 
+        VALUES (?, ?, ?, ?)`,
+        [name, type, description, isCustom]
       );
     }
     console.log('✅ Donation categories inserted');
@@ -1162,6 +1212,359 @@ async function checkDatabaseStructure() {
     console.error('Error checking database structure:', error);
   }
 }
+
+app.get('/api/donations', async (req, res) => {
+  try {
+    const { month, category_name } = req.query;
+
+    let query = `
+      SELECT
+        d.id,
+        d.donation_id,
+        d.donor_name,
+        d.donation_date,
+        d.payment_method,
+        d.reference_number,
+        d.notes,
+        d.attachment_path,
+        d.created_at,
+        di.id AS item_id,
+        di.item_name,
+        di.quantity,
+        di.unit,
+        di.amount,
+        di.description AS item_description,
+        dc.name AS category_name
+      FROM donations d
+      LEFT JOIN donation_items di
+        ON d.id = di.donation_id
+      LEFT JOIN donation_categories dc
+        ON di.category_id = dc.id
+      WHERE 1=1
+    `;
+
+    const params = [];
+
+    if (month) {
+      query += ` AND strftime('%Y-%m', d.donation_date) = ?`;
+      params.push(month);
+    }
+
+    if (category_name) {
+      query += ` AND dc.name = ?`;
+      params.push(category_name);
+    }
+
+    query += `
+      ORDER BY d.donation_date DESC, d.id DESC, di.id ASC
+    `;
+
+    const donations = await db.all(query, params);
+
+    res.json(donations);
+
+  } catch (error) {
+    console.error('Error fetching donations:', error);
+
+    res.status(500).json({
+      error: 'Internal server error'
+    });
+  }
+});
+
+app.post('/api/donations', uploadTransaction.single('attachment'), async (req, res) => {
+  try {
+    const {
+      donor_name,
+      donation_date,
+      payment_method,
+      reference_number,
+      notes,
+      items
+    } = req.body;
+
+    // =========================
+    // VALIDATION
+    // =========================
+
+    if (!donor_name || !donor_name.trim()) {
+      return res.status(400).json({
+        error: 'Nama donatur harus diisi'
+      });
+    }
+
+    if (!donation_date) {
+      return res.status(400).json({
+        error: 'Tanggal donasi harus diisi'
+      });
+    }
+
+    if (!items) {
+      return res.status(400).json({
+        error: 'Minimal pilih satu kategori donasi'
+      });
+    }
+
+    let parsedItems;
+
+    try {
+      parsedItems = JSON.parse(items);
+    } catch (error) {
+      return res.status(400).json({
+        error: 'Format item donasi tidak valid'
+      });
+    }
+
+    if (!Array.isArray(parsedItems) || parsedItems.length === 0) {
+      return res.status(400).json({
+        error: 'Minimal pilih satu kategori donasi'
+      });
+    }
+
+    // =========================
+    // GENERATE DONATION ID
+    // =========================
+
+    const lastDonation = await db.get(`
+      SELECT donation_id
+      FROM donations
+      ORDER BY id DESC
+      LIMIT 1
+    `);
+
+    let newDonationNumber = 1;
+
+    if (lastDonation) {
+      const lastNumber = parseInt(
+        lastDonation.donation_id.split('-')[1]
+      );
+
+      if (!isNaN(lastNumber)) {
+        newDonationNumber = lastNumber + 1;
+      }
+    }
+
+    const donationId = `DON-${newDonationNumber
+      .toString()
+      .padStart(3, '0')}`;
+
+    // =========================
+    // ATTACHMENT
+    // =========================
+
+    const attachmentPath = req.file
+      ? `/uploads/transactions/${req.file.filename}`
+      : null;
+
+    // =========================
+    // START TRANSACTION
+    // =========================
+
+    await db.run('BEGIN TRANSACTION');
+
+    try {
+
+      // =========================
+      // INSERT DONATION
+      // =========================
+
+      const donationResult = await db.run(`
+        INSERT INTO donations (
+          donation_id,
+          donor_name,
+          donation_date,
+          payment_method,
+          reference_number,
+          notes,
+          attachment_path
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `, [
+        donationId,
+        donor_name.trim(),
+        donation_date,
+        payment_method || 'cash',
+        reference_number || '',
+        notes || '',
+        attachmentPath
+      ]);
+
+      const donationDbId = donationResult.lastID;
+
+      // =========================
+      // INSERT ITEMS
+      // =========================
+
+      for (const item of parsedItems) {
+
+        if (!item.category_name) {
+          continue;
+        }
+
+        // -------------------------
+        // FIND CATEGORY
+        // -------------------------
+
+        let category = await db.get(
+          `
+          SELECT id, name, type
+          FROM donation_categories
+          WHERE name = ?
+          `,
+          [item.category_name]
+        );
+
+        // -------------------------
+        // CREATE CATEGORY IF NEEDED
+        // -------------------------
+
+        if (!category) {
+
+          const newCategory = await db.run(`
+            INSERT INTO donation_categories (
+              name,
+              type,
+              description
+            )
+            VALUES (?, 'income', ?)
+          `, [
+            item.category_name,
+            `Kategori donasi: ${item.category_name}`
+          ]);
+
+          category = {
+            id: newCategory.lastID,
+            name: item.category_name,
+            type: 'income'
+          };
+        }
+
+        // -------------------------
+        // INSERT DONATION ITEM
+        // -------------------------
+
+        const itemAmount = parseFloat(item.amount) || 0;
+        const itemQuantity = parseFloat(item.quantity) || 0;
+
+        await db.run(`
+          INSERT INTO donation_items (
+            donation_id,
+            category_id,
+            item_name,
+            quantity,
+            unit,
+            amount,
+            description
+          )
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+        `, [
+          donationDbId,
+          category.id,
+          item.item_name || null,
+          itemQuantity,
+          item.unit || null,
+          itemAmount,
+          item.description || null
+        ]);
+
+        // =========================
+        // CREATE TRANSACTION
+        // =========================
+
+        // Hanya kategori yang mempunyai nilai uang
+        // yang dimasukkan ke transactions.
+
+        if (itemAmount > 0) {
+
+          // Cari nomor transaksi terakhir
+          const lastTransaction = await db.get(
+            `
+            SELECT transaction_id
+            FROM transactions
+            WHERE transaction_id LIKE 'INC-%'
+            ORDER BY id DESC
+            LIMIT 1
+            `
+          );
+
+          let newTransactionNumber = 1;
+
+          if (lastTransaction) {
+            const lastNumber = parseInt(
+              lastTransaction.transaction_id.split('-')[1]
+            );
+
+            if (!isNaN(lastNumber)) {
+              newTransactionNumber = lastNumber + 1;
+            }
+          }
+
+          const transactionId = `INC-${newTransactionNumber
+            .toString()
+            .padStart(3, '0')}`;
+
+          await db.run(`
+            INSERT INTO transactions (
+              transaction_id,
+              category_id,
+              amount,
+              transaction_date,
+              source,
+              description,
+              payment_method,
+              reference_number,
+              notes,
+              attachment_path
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `, [
+            transactionId,
+            category.id,
+            itemAmount,
+            donation_date,
+            donor_name.trim(),
+            item.description ||
+              `${item.category_name}${item.item_name ? ` - ${item.item_name}` : ''}`,
+            payment_method || 'cash',
+            reference_number || '',
+            notes || '',
+            attachmentPath
+          ]);
+        }
+      }
+
+      // =========================
+      // COMMIT
+      // =========================
+
+      await db.run('COMMIT');
+
+      res.status(201).json({
+        id: donationDbId,
+        donation_id: donationId,
+        message: 'Donation created successfully',
+        attachment_path: attachmentPath
+      });
+
+    } catch (error) {
+
+      // Kalau ada error di tengah proses,
+      // batalkan semua perubahan.
+
+      await db.run('ROLLBACK');
+
+      throw error;
+    }
+
+  } catch (error) {
+
+    console.error('Error creating donation:', error);
+
+    res.status(500).json({
+      error: 'Internal server error'
+    });
+  }
+});
 
 // ================== RESIDENTS API ==================
 // GET single resident by ID
@@ -3199,7 +3602,7 @@ app.get('/api/employee-payrolls', async (req, res) => {
        */
 
       const baseSalary = isDaily
-        ? salaryRate * paidDays
+        ? salaryRate / 2
         : salaryRate;
 
       /*
@@ -3229,7 +3632,7 @@ app.get('/api/employee-payrolls', async (req, res) => {
         additionalVariable -
         bpjsDeduction -
         loanDeduction -
-        attendanceDeduction;
+        (isDaily ? attendanceDeduction : 0);
 
       /*
        * =====================================================

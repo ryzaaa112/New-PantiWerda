@@ -125,6 +125,19 @@ export const transactionsAPI = {
   delete: (id) => api.delete(`/transactions/${id}`),
 };
 
+// Donations
+export const donationsAPI = {
+  getAll: (filters = {}) =>
+    api.get('/donations', { params: filters }),
+
+  create: (data) =>
+    api.post('/donations', data, {
+      headers: {
+        'Content-Type': undefined
+      }
+    }),
+};
+
 // Users Management
 export const usersAPI = {
   getAll: () => api.get('/users'),

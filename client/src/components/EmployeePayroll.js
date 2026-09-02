@@ -430,12 +430,16 @@ const handleDownloadExcel = () => {
                     <th>Gaji Pokok</th>
                     <th>Variabel tambahan</th>
                     <th>BPJS</th>
-                        {selectedSalaryType === 'Bulanan' && (
-                          <>
-                            <th>Pinjaman</th>
-                          </>
-                        )}
-                    <th>Potongan Absensi</th>
+                    {selectedSalaryType === 'Bulanan' && (
+                      <>
+                        <th>Pinjaman</th>
+                      </>
+                    )}
+                    {selectedSalaryType === 'Harian' && (
+                      <>
+                        <th>Potongan Absensi</th>
+                      </>
+                    )}
                     <th>Total Dibayar</th>
                     <th>Status</th>
                   </tr>
