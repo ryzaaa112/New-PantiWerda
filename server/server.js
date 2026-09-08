@@ -2298,6 +2298,7 @@ const attendanceStatuses = {
   A: 'Alpa',
   O: 'Off',
   K: 'Kebijakan',
+  L: 'Libur',
 };
 
 function isValidMonth(month) {
@@ -2493,7 +2494,7 @@ if (diffDays > 2) {
 
     if (!attendanceStatuses[status]) {
       return res.status(400).json({
-        error: 'Status absensi tidak valid. Gunakan H, S, I, T, A, O, atau K',
+        error: 'Status absensi tidak valid. Gunakan H, S, I, T, A, O, K, atau L',
       });
     }
 

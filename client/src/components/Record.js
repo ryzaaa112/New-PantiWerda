@@ -1,20 +1,13 @@
 // components/Record.js
 import React, { useState, useEffect } from 'react';
-import { recordsAPI, residentsAPI, activityTypesAPI } from '../services/api';
+import { recordsAPI, residentsAPI } from '../services/api';
 
 const Record = ({ navigateTo }) => {
   const [showRecordForm, setShowRecordForm] = useState(false);
   const [records, setRecords] = useState([]);
   const [residents, setResidents] = useState([]);
-  const [activityTypes, setActivityTypes] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isFormLoading, setIsFormLoading] = useState(false);
-
-  const [filters, setFilters] = useState({
-    resident: '',
-    date_from: '',
-    date_to: ''
-  });
 
   // Get current date and time for default values
   const now = new Date();
@@ -23,7 +16,7 @@ const Record = ({ navigateTo }) => {
 
   const [formData, setFormData] = useState({
     resident_id: '',
-    activity_type_id: '',
+    activity_name: '',
     record_date: currentDate,
     record_time: currentTime,
     condition: 'Baik',
@@ -33,21 +26,14 @@ const Record = ({ navigateTo }) => {
 
   useEffect(() => {
     fetchData();
-  }, []);
-
-  useEffect(() => {
     fetchRecords();
-  }, [filters]);
+  }, []);
 
   const fetchData = async () => {
     try {
       setIsLoading(true);
-      const [residentsData, activityTypesData] = await Promise.all([
-        residentsAPI.getAll({ status: 'Aktif' }),
-        activityTypesAPI.getAll()
-      ]);
+      const residentsData = await residentsAPI.getAll();
       setResidents(residentsData);
-      setActivityTypes(activityTypesData);
     } catch (error) {
       console.error('Error fetching data:', error);
       alert('Gagal memuat data');
@@ -59,7 +45,7 @@ const Record = ({ navigateTo }) => {
   const fetchRecords = async () => {
     try {
       setIsLoading(true);
-      const data = await recordsAPI.getAll(filters);
+      const data = await recordsAPI.getAll();
       setRecords(data);
     } catch (error) {
       console.error('Error fetching records:', error);
@@ -77,7 +63,7 @@ const Record = ({ navigateTo }) => {
 
       setFormData({
         resident_id: '',
-        activity_type_id: '',
+        activity_name: '',
         record_date: currentDate,
         record_time: currentTime,
         condition: 'Baik',
@@ -121,13 +107,6 @@ const Record = ({ navigateTo }) => {
     }
   };
 
-  const handleFilterChange = (field, value) => {
-    setFilters(prev => ({
-      ...prev,
-      [field]: value
-    }));
-  };
-
   const getConditionColor = (condition) => {
     switch (condition) {
       case 'Baik': return 'success';
@@ -154,7 +133,6 @@ const Record = ({ navigateTo }) => {
   const formatTimeForInput = (timeString) => {
     if (!timeString) return '00:00';
 
-    // If time is in "HH:MM:SS" format, extract just "HH:MM"
     if (timeString.includes(':')) {
       const parts = timeString.split(':');
       if (parts.length >= 2) {
@@ -172,8 +150,6 @@ const Record = ({ navigateTo }) => {
     try {
       await recordsAPI.delete(recordId);
       alert('✅ Record berhasil dihapus');
-
-      // Refresh the records list
       fetchRecords();
     } catch (error) {
       console.error('Error deleting record:', error);
@@ -196,7 +172,7 @@ const Record = ({ navigateTo }) => {
         <button className="btn btn-primary-custom" onClick={toggleForm}>
           <i className="fas fa-plus"></i> Tambah Record Baru
         </button>
-        <button className="btn btn-outline-secondary" onClick={fetchData}>
+        <button className="btn btn-outline-secondary" onClick={fetchRecords}>
           <i className="fas fa-sync-alt"></i> Refresh
         </button>
       </div>
@@ -237,7 +213,7 @@ const Record = ({ navigateTo }) => {
                   onChange={handleFormChange}
                   required
                   disabled={isFormLoading}
-                  max={currentDate} // Cannot select future dates
+                  max={currentDate}
                 />
               </div>
 
@@ -251,28 +227,24 @@ const Record = ({ navigateTo }) => {
                   onChange={handleFormChange}
                   required
                   disabled={isFormLoading}
-                  step="300" // 5 minute increments (300 seconds)
+                  step="300"
                 />
                 <small className="text-muted">Format: 24 jam</small>
               </div>
 
+              {/* Diubah menjadi Textbox */}
               <div className="col-md-6">
                 <label className="form-label">Kejadian *</label>
-                <select
-                  className="form-select"
-                  name="activity_type_id"
-                  value={formData.activity_type_id}
+                <input
+                  type="text"
+                  className="form-control"
+                  name="activity_name"
+                  value={formData.activity_name}
                   onChange={handleFormChange}
+                  placeholder="Contoh: Jatuh dari tempat tidur, Makan obat, dll"
                   required
                   disabled={isFormLoading}
-                >
-                  <option value="">-- Pilih Kejadian --</option>
-                  {activityTypes.map(type => (
-                    <option key={type.id} value={type.id}>
-                      {type.name}
-                    </option>
-                  ))}
-                </select>
+                />
               </div>
 
               <div className="col-md-6">
@@ -349,117 +321,6 @@ const Record = ({ navigateTo }) => {
           </form>
         </div>
       )}
-
-      {/* Filters */}
-      <div className="filter-row mb-4">
-        <div className="row g-2">
-          <div className="col-md-4">
-            <label className="form-label">Filter Opa/Oma</label>
-            <select
-              className="form-select"
-              value={filters.resident}
-              onChange={(e) => handleFilterChange('resident', e.target.value)}
-              disabled={isLoading}
-            >
-              <option value="">Semua Opa & Oma</option>
-              {residents.map(resident => (
-                <option key={resident.id} value={resident.id}>
-                  {resident.name} ({resident.gender === 'male' ? 'Opa' : 'Oma'})
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="col-md-3">
-            <label className="form-label">Dari Tanggal</label>
-            <input
-              type="date"
-              className="form-control"
-              value={filters.date_from}
-              onChange={(e) => handleFilterChange('date_from', e.target.value)}
-              placeholder="Dari tanggal"
-              disabled={isLoading}
-            />
-          </div>
-
-          <div className="col-md-3">
-            <label className="form-label">Sampai Tanggal</label>
-            <input
-              type="date"
-              className="form-control"
-              value={filters.date_to}
-              onChange={(e) => handleFilterChange('date_to', e.target.value)}
-              placeholder="Sampai tanggal"
-              disabled={isLoading}
-              min={filters.date_from} // Cannot select date before "from" date
-            />
-          </div>
-
-          <div className="col-md-2 d-flex align-items-end">
-            <button
-              className="btn btn-outline-secondary w-100"
-              onClick={() => setFilters({ resident: '', date_from: '', date_to: '' })}
-              disabled={isLoading}
-            >
-              <i className="fas fa-times"></i> Reset Filter
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Record List */}
-      <div className="record-list">
-        {isLoading ? (
-          <div className="text-center py-5">
-            <div className="spinner-border text-primary" role="status">
-              <span className="visually-hidden">Loading...</span>
-            </div>
-            <p className="mt-2">Memuat data record...</p>
-          </div>
-        ) : records.length === 0 ? (
-          <div className="text-center py-5">
-            <i className="fas fa-clipboard-list fa-3x text-muted mb-3"></i>
-            <p className="text-muted">
-              {Object.values(filters).some(f => f)
-                ? 'Tidak ditemukan record dengan filter tersebut'
-                : 'Belum ada report kejadian. Tambahkan record baru untuk melihatnya di sini.'
-              }
-            </p>
-          </div>
-        ) : (
-          records.map(record => (
-            <div key={record.id} className="record-card">
-              <div className="record-header">
-                <div className="record-date">
-                  <i className="fas fa-calendar-day"></i> {formatDateTime(record.record_datetime)}
-                </div>
-                <span className={`badge`} style={{
-                  backgroundColor: record.activity_color || '#007bff',
-                  color: 'white'
-                }}>
-                  {record.activity_name}
-                </span>
-              </div>
-              <h5 className="record-name">
-                {record.resident_name} ({record.resident_type})
-              </h5>
-              <div className="mb-2">
-                <span className={`badge bg-${getConditionColor(record.condition)} me-2`}>
-                  {record.condition}
-                </span>
-              </div>
-              <p className="mb-0">{record.notes}</p>
-              {record.recorded_by && (
-                <div className="record-footer mt-2">
-                  <small className="text-muted">
-                    Dicatat oleh: {record.recorded_by}
-                  </small>
-                </div>
-              )}
-            </div>
-          ))
-        )}
-      </div>
     </div>
   );
 };

@@ -9,9 +9,10 @@ const STATUS_LIST = [
   { code: 'A', label: 'Alpa', className: 'bg-danger text-white' },
   { code: 'O', label: 'Off', className: 'bg-secondary text-white' },
   { code: 'K', label: 'Kebijakan', className: 'bg-primary text-white' },
+  { code: 'L', label: 'Libur', className: 'bg-dark text-white' },
 ];
 
-const STATUS_ORDER = ['', 'H', 'S', 'I', 'T', 'A', 'O', 'K'];
+const STATUS_ORDER = ['', 'H', 'S', 'I', 'T', 'A', 'O', 'K', 'L'];
 
 const pad2 = (num) => String(num).padStart(2, '0');
 
@@ -126,7 +127,55 @@ const Attendance = ({ navigateTo }) => {
   const getStatusData = (status) => {
     return STATUS_LIST.find((item) => item.code === status);
   };
+const getDefaultAttendanceStatus = (employeeIndex, day) => {
+  const attendanceDate = new Date(
+    `${month}-${String(day).padStart(2, '0')}T00:00:00`
+  );
 
+  // Bukan hari Minggu → Hadir
+  if (attendanceDate.getDay() !== 0) {
+    return 'H';
+  }
+
+  // Cari tanggal 1 pada bulan yang sedang dipilih
+  const firstDayOfMonth = new Date(`${month}-01T00:00:00`);
+
+  // Cari hari Minggu pertama di bulan tersebut
+  const firstSunday = new Date(firstDayOfMonth);
+
+  const daysUntilSunday = (7 - firstDayOfMonth.getDay()) % 7;
+
+  firstSunday.setDate(
+    firstDayOfMonth.getDate() + daysUntilSunday
+  );
+
+  // Hitung Minggu keberapa
+  const weekNumber =
+    Math.floor(
+      (attendanceDate.getDate() - firstSunday.getDate()) / 7
+    ) + 1;
+
+  // Nomor urut karyawan:
+  // index 0 = karyawan urutan 1
+  // index 1 = karyawan urutan 2
+  // dst.
+  const employeeNumber = employeeIndex + 1;
+
+  const isOddEmployee = employeeNumber % 2 === 1;
+  const isOddWeek = weekNumber % 2 === 1;
+
+  // Karyawan ganjil:
+  // Minggu ganjil = H
+  // Minggu genap = L
+  if (isOddEmployee) {
+    return isOddWeek ? 'H' : 'L';
+  }
+
+  // Karyawan genap:
+  // Minggu ganjil = L
+  // Minggu genap = H
+  return isOddWeek ? 'L' : 'H';
+};
   const isAttendanceLocked = (day) => {
   const attendanceDate = new Date(
     `${month}-${String(day).padStart(2, "0")}`
@@ -581,7 +630,7 @@ const updateAttendanceCell = async (
               </thead>
 
               <tbody>
-                {filteredEmployees.map((employee) => (
+                {filteredEmployees.map((employee, employeeIndex) => (
                   <tr key={employee.id}>
                     <td className="fw-semibold">{employee.name}</td>
                     <td className="text-center">
@@ -589,7 +638,8 @@ const updateAttendanceCell = async (
                       </td>
 
                     {days.map((day) => {
-                      const currentStatus = employee.attendance?.[day]?.status || 'H';
+                      const currentStatus =
+                      employee.attendance?.[day]?.status ||getDefaultAttendanceStatus(employeeIndex, day);
                       const locked = isAttendanceLocked(day);
                       const statusData = getStatusData(currentStatus);
                       const cellKey = `${employee.id}-${day}`;
