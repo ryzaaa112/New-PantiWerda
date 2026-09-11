@@ -12,7 +12,7 @@ const STATUS_LIST = [
   { code: 'L', label: 'Libur', className: 'bg-dark text-white' },
 ];
 
-const STATUS_ORDER = ['', 'H', 'S', 'I', 'T', 'A', 'O', 'K', 'L'];
+const STATUS_ORDER = ['', 'H', 'S', 'I', 'T', 'A', 'O', 'K'];
 
 const pad2 = (num) => String(num).padStart(2, '0');
 
@@ -194,12 +194,21 @@ const getDefaultAttendanceStatus = (employeeIndex, day) => {
 };
 
   const getNextStatus = (currentStatus) => {
-    const currentIndex = STATUS_ORDER.indexOf(currentStatus || '');
+  const currentIndex = STATUS_ORDER.indexOf(currentStatus || '');
 
-    if (currentIndex === -1) return 'H';
+  if (currentIndex === -1) {
+    return 'H';
+  }
 
-    return STATUS_ORDER[(currentIndex + 1) % STATUS_ORDER.length];
-  };
+  // Kalau sudah K, kembali ke H
+  if (currentStatus === 'K') {
+    return 'H';
+  }
+
+  const nextStatus = STATUS_ORDER[currentIndex + 1];
+
+  return nextStatus || 'H';
+};
 
 const updateAttendanceCell = async (
   employeeId,
