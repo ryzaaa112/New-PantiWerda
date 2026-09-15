@@ -634,16 +634,17 @@ const handleConfirmToggleStatus = () => {
   };
 
   const ATTENDANCE_STATUS_LIST = [
-    { code: 'H', label: 'Hadir', className: 'bg-success text-white' },
-    { code: 'S', label: 'Sakit', className: 'bg-info text-dark' },
-    { code: 'I', label: 'Izin', className: 'bg-warning text-dark' },
-    { code: 'T', label: 'Izin (Tidak digaji)', className: 'bg-orange text-white' },
-    { code: 'A', label: 'Alpa', className: 'bg-danger text-white' },
-    { code: 'O', label: 'Off', className: 'bg-secondary text-white' },
-    { code: 'K', label: 'Kebijakan', className: 'bg-primary text-white' },
-  ];
+  { code: 'H', label: 'Hadir', className: 'bg-success text-white' },
+  { code: 'S', label: 'Sakit', className: 'bg-info text-dark' },
+  { code: 'I', label: 'Izin', className: 'bg-warning text-dark' },
+  { code: 'T', label: 'Izin (Tidak digaji)', className: 'bg-orange text-white' },
+  { code: 'A', label: 'Alpa', className: 'bg-danger text-white' },
+  { code: 'O', label: 'Off', className: 'bg-secondary text-white' },
+  { code: 'K', label: 'Kebijakan', className: 'bg-primary text-white' },
+  { code: 'L', label: 'Libur', className: 'bg-dark text-white' },
+];
 
-  const ATTENDANCE_STATUS_ORDER = ['', 'H', 'S', 'I', 'T', 'A', 'O', 'K'];
+const ATTENDANCE_STATUS_ORDER = ['', 'H', 'S', 'I', 'T', 'A', 'O', 'K'];
 
   const pad2 = (num) => String(num).padStart(2, '0');
 
@@ -666,17 +667,77 @@ const handleConfirmToggleStatus = () => {
     return ATTENDANCE_STATUS_LIST.find((item) => item.code === status);
   };
 
+const getDefaultAttendanceStatus = (day) => {
+  const attendanceDate = new Date(
+    `${attendanceMonth}-${String(day).padStart(2, '0')}T00:00:00`
+  );
+
+  // Senin-Sabtu = Hadir
+  if (attendanceDate.getDay() !== 0) {
+    return 'H';
+  }
+
+  // Cari Minggu pertama dalam bulan
+  const firstDayOfMonth = new Date(
+    `${attendanceMonth}-01T00:00:00`
+  );
+
+  const firstSunday = new Date(firstDayOfMonth);
+
+  const daysUntilSunday =
+    (7 - firstDayOfMonth.getDay()) % 7;
+
+  firstSunday.setDate(
+    firstDayOfMonth.getDate() + daysUntilSunday
+  );
+
+  // Tentukan Minggu keberapa
+  const weekNumber =
+    Math.floor(
+      (attendanceDate.getDate() - firstSunday.getDate()) / 7
+    ) + 1;
+
+  /*
+   * Ambil nomor urut karyawan dari employee yang sedang dibuka.
+   * employeeId berasal dari halaman Detail Karyawan.
+   */
+  const employeeNumber = Number(employeeId);
+
+  const isOddEmployee = employeeNumber % 2 === 1;
+  const isOddWeek = weekNumber % 2 === 1;
+
+  // Karyawan ganjil:
+  // Minggu ganjil = H
+  // Minggu genap = L
+  if (isOddEmployee) {
+    return isOddWeek ? 'H' : 'L';
+  }
+
+  // Karyawan genap:
+  // Minggu ganjil = L
+  // Minggu genap = H
+  return isOddWeek ? 'L' : 'H';
+};
+
   const getNextAttendanceStatus = (currentStatus) => {
-    const currentIndex = ATTENDANCE_STATUS_ORDER.indexOf(currentStatus || '');
+  const currentIndex = ATTENDANCE_STATUS_ORDER.indexOf(
+    currentStatus || ''
+  );
 
-    if (currentIndex === -1) {
-      return 'H';
-    }
+  if (currentIndex === -1) {
+    return 'H';
+  }
 
-    return ATTENDANCE_STATUS_ORDER[
-      (currentIndex + 1) % ATTENDANCE_STATUS_ORDER.length
-    ];
-  };
+  // Kalau status sekarang K, kembali ke H
+  if (currentStatus === 'K') {
+    return 'H';
+  }
+
+  const nextStatus = ATTENDANCE_STATUS_ORDER[currentIndex + 1];
+
+  // Kalau tidak ada status berikutnya, kembali ke H
+  return nextStatus || 'H';
+};
 
   const fetchEmployeeAttendance = async () => {
     try {
@@ -1504,8 +1565,9 @@ const handleConfirmToggleStatus = () => {
                           { length: attendanceData.daysInMonth },
                           (_, index) => index + 1
                         ).map((day) => {
-                          const currentStatus =
-                            attendanceData.employee.attendance?.[day]?.status || 'H';
+                         const currentStatus =
+                              attendanceData.employee.attendance?.[day]?.status ||
+                              getDefaultAttendanceStatus(day);
 
                           const statusData = getAttendanceStatusData(currentStatus);
 
