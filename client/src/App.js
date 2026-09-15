@@ -16,6 +16,7 @@ import InputEmployee from './components/InputEmployee';
 import EmployeeDetail from  './components/EmployeeDetail';
 import Attendance from './components/Attendance';
 import EmployeePayroll from './components/EmployeePayroll';
+import DonationForm from './components/DonationForm';
 
 function App() {
   const [currentPage, setCurrentPage] = useState('dashboard');
@@ -128,6 +129,15 @@ function App() {
           return <Donation navigateTo={navigateTo} user={user} />;
         } else {
           alert('Akses ditolak. Hanya admin yang dapat mengakses halaman keuangan.');
+          navigateTo('dashboard');
+          return null;
+        }
+      case 'donation-form':
+        // Only admin can access donation form
+        if (user.role === 'admin') {
+          return <DonationForm navigateTo={navigateTo} user={user} />;
+        } else {
+          alert('Akses ditolak. Hanya admin yang dapat mengakses halaman donasi.');
           navigateTo('dashboard');
           return null;
         }

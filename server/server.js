@@ -1097,11 +1097,9 @@ async function insertDefaultData() {
       ['Lainnya', 'income', 'Kategori donasi lainnya', 1]
     ];
 
-    await db.run('DELETE FROM donation_categories');
-
     for (const [name, type, description, isCustom] of donationCategories) {
       await db.run(
-        `INSERT INTO donation_categories 
+        `INSERT OR IGNORE INTO donation_categories 
         (name, type, description, is_custom) 
         VALUES (?, ?, ?, ?)`,
         [name, type, description, isCustom]
@@ -2180,10 +2178,45 @@ app.get('/api/records', async (req, res) => {
 });
 
 // Create new daily record
+// Create new daily record
 app.post('/api/records', async (req, res) => {
   try {
-    let { resident_id, activity_type_id, record_datetime, condition, notes, recorded_by } = req.body;
+    let {
+      resident_id,
+      activity_type_id,
+      activity_name,
+      record_datetime,
+      condition,
+      notes,
+      recorded_by
+    } = req.body;
 
+    if (!resident_id || (!activity_type_id && !activity_name) || !record_datetime || !condition || !notes) {
+      return res.status(400).json({ error: 'Data record belum lengkap' });
+    }
+
+    // Free-text activities from the form are stored as reusable activity types.
+    if (!activity_type_id && activity_name.trim()) {
+      const existingActivity = await db.get(
+        'SELECT id FROM activity_types WHERE name = ?',
+        [activity_name.trim()]
+      );
+
+      if (existingActivity) {
+        activity_type_id = existingActivity.id;
+      } else {
+        const newActivity = await db.run(
+          'INSERT INTO activity_types (name, category) VALUES (?, ?)',
+          [activity_name.trim(), 'special']
+        );
+        activity_type_id = newActivity.lastID;
+      }
+    }
+
+    if (!activity_type_id) {
+      return res.status(400).json({ error: 'Nama kejadian harus diisi' });
+    }
+    
     // Ensure record_datetime has seconds if not provided
     if (record_datetime && record_datetime.length === 16) { // YYYY-MM-DDTHH:MM format
       record_datetime += ':00'; // Add seconds
